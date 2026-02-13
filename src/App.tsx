@@ -20,6 +20,19 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     setTasks((prev) => [...prev, task]);
   }
 
+  function handleCompleteTask(id: string) {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === id
+          ? {
+              ...task,
+              completed: true,
+            }
+          : task
+      )
+    );
+  }
+
   function handleExport() {
     exportTasksAsJson(tasks);
   }
@@ -40,7 +53,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
 
       <main className="app-main">
         <TaskForm onAdd={handleAddTask} />
-        <TaskList tasks={tasks} />
+        <TaskList tasks={tasks} onCompleteTask={handleCompleteTask} />
       </main>
 
       <footer className="app-footer">

@@ -3,10 +3,21 @@ import type { Task } from "@domain/taskTypes";
 /**
  * Export tasks to a JSON file and trigger a download in the browser.
  */
-export function exportTasksAsJson(tasks: Task[], filename = "niyamit-tasks.json") {
+export function exportTasksAsJson(
+  tasks: Task[],
+  filename = "niyamit-tasks.json"
+) {
   if (typeof window === "undefined") return;
 
-  const json = JSON.stringify(tasks, null, 2);
+  const activeTasks = tasks.filter((task) => !task.completed);
+  const completedTasks = tasks.filter((task) => task.completed);
+
+  const backup = {
+    activeTasks,
+    completedTasks,
+  };
+
+  const json = JSON.stringify(backup, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
