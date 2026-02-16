@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Offline-first task manager with React + TypeScript and JSON storage, designed to sync with Google Drive.",
+  "homepage": "https://rahulsingh80.github.io/Niyamit",
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -17,6 +20,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.3",
+    "gh-pages": "^6.3.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   }
