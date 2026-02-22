@@ -29,6 +29,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
       dueDate: dueDate || null,
       priority,
       createdAt: nowIso,
+      updatedAt: nowIso,
       completed: false,
     };
 

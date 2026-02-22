@@ -21,6 +21,10 @@ export interface Task {
    */
   createdAt: string;
   /**
+   * ISO datetime string for last update time.
+   */
+  updatedAt?: string;
+  /**
    * Completion flag kept simple for now.
    */
   completed: boolean;
