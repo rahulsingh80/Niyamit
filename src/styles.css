@@ -13,7 +13,7 @@ body {
 
 .app-root {
   min-height: 100vh;
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 2.5rem 1.5rem 3rem;
   display: flex;
@@ -21,11 +21,14 @@ body {
   gap: 1.5rem;
 }
 
+/* ── Header ──────────────────────────────────────────── */
+
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .app-header h1 {
@@ -38,17 +41,79 @@ body {
   color: #6b7280;
 }
 
-.app-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+/* ── Main layout ─────────────────────────────────────── */
+
+.app-main.layout-centered {
+  display: flex;
   gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.list-centered {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-task-btn {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  padding: 0.55rem 1.25rem;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.app-main.layout-split {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
 }
 
 @media (max-width: 720px) {
-  .app-main {
-    grid-template-columns: minmax(0, 1fr);
+  .app-main.layout-centered {
+    flex-direction: column;
+    max-width: none;
+  }
+
+  .app-main.layout-split {
+    grid-template-columns: 1fr;
   }
 }
+
+/* ── Form panel ──────────────────────────────────────── */
+
+.form-panel {
+  position: sticky;
+  top: 1.5rem;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.close-btn {
+  background: transparent;
+  font-size: 1.25rem;
+  color: #6b7280;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.4rem;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* ── Footer ──────────────────────────────────────────── */
 
 .app-footer {
   margin-top: auto;
@@ -56,6 +121,8 @@ body {
   border-top: 1px solid #e5e7eb;
   color: #9ca3af;
 }
+
+/* ── Card ────────────────────────────────────────────── */
 
 .card {
   background: white;
@@ -75,6 +142,8 @@ body {
   text-align: center;
   color: #9ca3af;
 }
+
+/* ── Form fields ─────────────────────────────────────── */
 
 .field {
   display: flex;
@@ -119,6 +188,8 @@ textarea {
   resize: vertical;
 }
 
+/* ── Buttons ─────────────────────────────────────────── */
+
 button {
   font: inherit;
   border-radius: 9999px;
@@ -132,24 +203,73 @@ button {
 }
 
 .primary {
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  background: #8ba4be;
   color: white;
-  box-shadow: 0 12px 30px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 6px 18px rgba(120, 148, 180, 0.3);
 }
 
 .primary:hover {
-  filter: brightness(1.03);
+  background: #7d98b4;
 }
 
 .secondary {
-  background: white;
-  color: #111827;
-  border: 1px solid #d1d5db;
+  background: #f2f8f2;
+  color: #5a7a5a;
+  border: 1px solid #c0d8c0;
 }
 
 .secondary:hover {
-  background: #f3f4f6;
+  background: #e8f0e8;
 }
+
+/* ── Date-grouped task list ──────────────────────────── */
+
+.task-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.date-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 0.25rem;
+}
+
+.date-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.overdue-label {
+  color: #9b7070;
+}
+
+.overdue-group .date-group-heading {
+  border-bottom-color: #e0d0d0;
+}
+
+.task-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 9999px;
+  padding: 0.05rem 0.5rem;
+}
+
+.overdue-group .task-count {
+  background: #f5eded;
+  color: #9b7070;
+}
+
+/* ── Task list & items ───────────────────────────────── */
 
 .task-list {
   list-style: none;
@@ -157,19 +277,20 @@ button {
   margin: 0.25rem 0 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .task-item {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
-  padding: 0.6rem 0.4rem;
-  border-bottom: 1px dashed #e5e7eb;
+  padding: 0.55rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: background 0.12s ease;
 }
 
-.task-item:last-of-type {
-  border-bottom: none;
+.task-item:hover {
+  background: rgba(99, 102, 241, 0.04);
 }
 
 .task-complete-toggle {
@@ -180,6 +301,23 @@ button {
   width: 1rem;
   height: 1rem;
   cursor: pointer;
+  accent-color: #888;
+}
+
+.task-item.priority-1 .task-complete-toggle input[type="radio"] {
+  accent-color: #b07070;
+}
+
+.task-item.priority-2 .task-complete-toggle input[type="radio"] {
+  accent-color: #9a8540;
+}
+
+.task-item.priority-3 .task-complete-toggle input[type="radio"] {
+  accent-color: #607898;
+}
+
+.task-item.priority-4 .task-complete-toggle input[type="radio"] {
+  accent-color: #999;
 }
 
 .task-item-content {
@@ -221,6 +359,8 @@ button {
   color: #6b7280;
 }
 
+/* ── Pills ───────────────────────────────────────────── */
+
 .pill {
   border-radius: 9999px;
   padding: 0.1rem 0.55rem;
@@ -232,28 +372,35 @@ button {
   font-size: 0.75rem;
 }
 
-.priority-4 {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.priority-3 {
-  background: #ffedd5;
-  border-color: #fed7aa;
-  color: #c2410c;
+.priority-1 {
+  background: #faf0f0;
+  border-color: #e8d5d5;
+  color: #996060;
 }
 
 .priority-2 {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #0369a1;
+  background: #faf8f0;
+  border-color: #e8e0c8;
+  color: #887740;
 }
 
-.priority-1 {
-  background: #e5e7eb;
-  border-color: #d1d5db;
-  color: #4b5563;
+.priority-3 {
+  background: #f0f4fa;
+  border-color: #d0d8e8;
+  color: #556888;
+}
+
+.priority-4 {
+  background: #f3f3f3;
+  border-color: #ddd;
+  color: #888;
+}
+
+.overdue-pill {
+  background: #f5eded;
+  border-color: #e0d0d0;
+  color: #9b7070;
+  font-size: 0.75rem;
 }
 
 .due-date {
@@ -271,4 +418,3 @@ button {
 .created-at {
   opacity: 0.9;
 }
-

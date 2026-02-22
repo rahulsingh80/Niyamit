@@ -13,7 +13,7 @@ export interface Task {
    */
   dueDate: string | null;
   /**
-   * Higher number == higher priority (4 is highest).
+   * Lower number == higher priority (1 is highest, 4 is lowest).
    */
   priority: TaskPriority;
   /**

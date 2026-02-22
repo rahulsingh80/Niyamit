@@ -16,6 +16,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     if (initialTasks) return initialTasks;
     return loadTasks();
   });
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
@@ -77,6 +78,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
 
   function handleAddTask(task: Task) {
     setTasks((prev) => [...prev, task]);
+    setIsFormOpen(false);
   }
 
   function handleCompleteTask(id: string) {
@@ -122,9 +124,39 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
         </div>
       </header>
 
-      <main className="app-main">
-        <TaskForm onAdd={handleAddTask} />
-        <TaskList tasks={tasks} onCompleteTask={handleCompleteTask} />
+      <main className={`app-main ${isFormOpen ? "layout-split" : "layout-centered"}`}>
+        {isFormOpen ? (
+          <>
+            <div className="form-panel card">
+              <div className="panel-header">
+                <h2>Create Task</h2>
+                <button
+                  type="button"
+                  className="close-btn"
+                  onClick={() => setIsFormOpen(false)}
+                  aria-label="Close form"
+                >
+                  ✕
+                </button>
+              </div>
+              <TaskForm onAdd={handleAddTask} />
+            </div>
+            <TaskList tasks={tasks} onCompleteTask={handleCompleteTask} />
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="primary create-task-btn"
+              onClick={() => setIsFormOpen(true)}
+            >
+              + Create Task
+            </button>
+            <div className="list-centered">
+              <TaskList tasks={tasks} onCompleteTask={handleCompleteTask} />
+            </div>
+          </>
+        )}
       </main>
 
       <footer className="app-footer">

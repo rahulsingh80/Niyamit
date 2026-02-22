@@ -5,7 +5,7 @@ interface TaskFormProps {
   onAdd(task: Task): void;
 }
 
-const DEFAULT_PRIORITY: TaskPriority = 2;
+const DEFAULT_PRIORITY: TaskPriority = 3;
 
 export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
   const [title, setTitle] = useState("");
@@ -43,8 +43,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card">
-      <h2>Create Task</h2>
+    <form onSubmit={handleSubmit}>
       <div className="field">
         <label htmlFor="title">Title</label>
         <input
@@ -83,10 +82,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
             value={priority}
             onChange={(e) => setPriority(Number(e.target.value) as TaskPriority)}
           >
-            <option value={4}>P4 – Highest</option>
-            <option value={3}>P3 – High</option>
-            <option value={2}>P2 – Medium</option>
-            <option value={1}>P1 – Low</option>
+            <option value={1}>P1 – Highest</option>
+            <option value={2}>P2 – High</option>
+            <option value={3}>P3 – Medium</option>
+            <option value={4}>P4 – Low</option>
           </select>
         </div>
       </div>

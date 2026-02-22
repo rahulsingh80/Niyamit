@@ -1,6 +1,6 @@
 import React from "react";
 import type { Task } from "@domain/taskTypes";
-import { sortTasks } from "@domain/taskSort";
+import { groupTasksByDate } from "@domain/taskSort";
 
 interface TaskListProps {
   tasks: Task[];
@@ -12,55 +12,67 @@ export const TaskList: React.FC<TaskListProps> = ({
   onCompleteTask,
 }) => {
   const activeTasks = tasks.filter((task) => !task.completed);
-  const sorted = sortTasks(activeTasks);
+  const groups = groupTasksByDate(activeTasks);
 
-  if (sorted.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="card empty">
-        <p>No tasks yet. Add your first task above.</p>
+        <p>No tasks yet. Create your first task!</p>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <h2>Tasks</h2>
-      <ul className="task-list">
-        {sorted.map((task) => (
-          <li key={task.id} className="task-item">
-            <div className="task-complete-toggle">
-              <input
-                type="radio"
-                name={`task-complete-${task.id}`}
-                aria-label="Mark task as completed"
-                onChange={() => onCompleteTask(task.id)}
-              />
-            </div>
-            <div className="task-item-content">
-              <div className="task-main">
-                <div className="task-title-row">
-                  <span className="task-title">{task.title}</span>
-                  <span className={`priority pill priority-${task.priority}`}>
-                    P{task.priority}
-                  </span>
+    <div className="task-list-container">
+      {groups.map((group) => (
+        <section
+          key={group.key}
+          className={`date-group${group.isOverdue ? " overdue-group" : ""}`}
+        >
+          <div className="date-group-heading">
+            <span
+              className={`date-label${group.isOverdue ? " overdue-label" : ""}`}
+            >
+              {group.label}
+            </span>
+            <span className="task-count">{group.tasks.length}</span>
+          </div>
+          <ul className="task-list">
+            {group.tasks.map((task) => (
+              <li key={task.id} className={`task-item priority-${task.priority}`}>
+                <div className="task-complete-toggle">
+                  <input
+                    type="radio"
+                    name={`task-complete-${task.id}`}
+                    aria-label="Mark task as completed"
+                    onChange={() => onCompleteTask(task.id)}
+                  />
                 </div>
-                {task.notes && <p className="task-notes">{task.notes}</p>}
-              </div>
-              <div className="task-meta">
-                {task.dueDate ? (
-                  <span className="pill due-date">Due {task.dueDate}</span>
-                ) : (
-                  <span className="pill no-due-date">No due date</span>
-                )}
-                <span className="created-at">
-                  Created {new Date(task.createdAt).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+                <div className="task-item-content">
+                  <div className="task-main">
+                    <div className="task-title-row">
+                      <span className="task-title">{task.title}</span>
+                      <span
+                        className={`priority pill priority-${task.priority}`}
+                      >
+                        P{task.priority}
+                      </span>
+                    </div>
+                    {task.notes && <p className="task-notes">{task.notes}</p>}
+                  </div>
+                  {group.isOverdue && task.dueDate && (
+                    <div className="task-meta">
+                      <span className="pill overdue-pill">
+                        Due {task.dueDate}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 };
-
