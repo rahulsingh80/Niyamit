@@ -377,6 +377,20 @@ button {
   gap: 0.75rem;
 }
 
+.task-pills {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.time-pill {
+  font-size: 0.75rem;
+  background: #f5f3ff;
+  border-color: #e0daf0;
+  color: #6b5fa0;
+}
+
 .task-title {
   font-weight: 500;
 }

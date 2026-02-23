@@ -9,9 +9,9 @@ export interface TaskGroup {
 
 /**
  * Sort tasks according to the product rules:
- * - Due date ascending
- * - Null / missing due dates at the bottom
+ * - Due date ascending (nulls last)
  * - Priority ascending (1 is highest)
+ * - Due time ascending (nulls last within same priority)
  * - CreatedAt ascending as final tie-breaker
  */
 export function sortTasks(tasks: Task[]): Task[] {
@@ -25,6 +25,13 @@ export function sortTasks(tasks: Task[]): Task[] {
 
     if (a.priority !== b.priority) {
       return a.priority - b.priority;
+    }
+
+    if (a.dueTime && !b.dueTime) return -1;
+    if (!a.dueTime && b.dueTime) return 1;
+    if (a.dueTime && b.dueTime) {
+      if (a.dueTime < b.dueTime) return -1;
+      if (a.dueTime > b.dueTime) return 1;
     }
 
     if (a.createdAt < b.createdAt) return -1;

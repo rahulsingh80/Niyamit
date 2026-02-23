@@ -11,6 +11,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState<string | "">("");
+  const [dueTime, setDueTime] = useState<string | "">("");
   const [priority, setPriority] = useState<TaskPriority>(DEFAULT_PRIORITY);
 
   function handleSubmit(event: FormEvent) {
@@ -27,6 +28,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
       title: trimmedTitle,
       notes: notes.trim() || undefined,
       dueDate: dueDate || null,
+      dueTime: dueDate && dueTime ? dueTime : undefined,
       priority,
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -39,6 +41,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
     setTitle("");
     setNotes("");
     setDueDate("");
+    setDueTime("");
     setPriority(DEFAULT_PRIORITY);
   }
 
@@ -72,7 +75,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
             id="dueDate"
             type="date"
             value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
+            onChange={(e) => {
+              setDueDate(e.target.value);
+              if (!e.target.value) setDueTime("");
+            }}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="dueTime">Time</label>
+          <input
+            id="dueTime"
+            type="time"
+            value={dueTime}
+            disabled={!dueDate}
+            onChange={(e) => setDueTime(e.target.value)}
           />
         </div>
         <div className="field">

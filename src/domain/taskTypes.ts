@@ -13,6 +13,11 @@ export interface Task {
    */
   dueDate: string | null;
   /**
+   * Time of day (HH:MM, 24-hour) or undefined when no time is set.
+   * Only meaningful when dueDate is present.
+   */
+  dueTime?: string;
+  /**
    * Lower number == higher priority (1 is highest, 4 is lowest).
    */
   priority: TaskPriority;

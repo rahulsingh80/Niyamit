@@ -52,10 +52,15 @@ export const TaskList: React.FC<TaskListProps> = ({
                   <div className="task-main">
                     <div className="task-title-row">
                       <span className="task-title">{task.title}</span>
-                      <span
-                        className={`priority pill priority-${task.priority}`}
-                      >
-                        P{task.priority}
+                      <span className="task-pills">
+                        {task.dueTime && (
+                          <span className="pill time-pill">{task.dueTime}</span>
+                        )}
+                        <span
+                          className={`priority pill priority-${task.priority}`}
+                        >
+                          P{task.priority}
+                        </span>
                       </span>
                     </div>
                     {task.notes && <p className="task-notes">{task.notes}</p>}
@@ -64,6 +69,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                     <div className="task-meta">
                       <span className="pill overdue-pill">
                         Due {task.dueDate}
+                        {task.dueTime ? ` ${task.dueTime}` : ""}
                       </span>
                     </div>
                   )}

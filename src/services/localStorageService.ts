@@ -20,6 +20,7 @@ export function loadTasks(): Task[] {
     return parsed.map((task) => ({
       ...task,
       dueDate: task.dueDate ?? null,
+      dueTime: task.dueTime || undefined,
       completed: task.completed ?? false,
     }));
   } catch {
