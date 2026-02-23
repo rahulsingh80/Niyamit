@@ -113,6 +113,43 @@ body {
   color: #111827;
 }
 
+/* ── Sync status & error banner ──────────────────────── */
+
+.sync-status {
+  font-size: 0.82rem;
+}
+
+.sync-status.success {
+  color: #5a7a5a;
+}
+
+.sync-error-banner {
+  background: #fdf4f4;
+  border: 1px solid #e0d0d0;
+  color: #996060;
+  border-radius: 0.6rem;
+  padding: 0.65rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.sync-error-dismiss {
+  background: transparent;
+  color: #996060;
+  font-size: 1.1rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.3rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sync-error-dismiss:hover {
+  background: #f0e0e0;
+}
+
 /* ── Footer ──────────────────────────────────────────── */
 
 .app-footer {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import type { Task } from "@domain/taskTypes";
 import { loadTasks, saveTasks } from "@services/localStorageService";
@@ -10,6 +10,14 @@ import "./styles.css";
 
 const TOKEN_KEY = "niyamit_google_token";
 const TOKEN_EXPIRY_KEY = "niyamit_google_token_expiry";
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+function getValidToken(): string | null {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+  if (token && expiry && Date.now() < Number(expiry)) return token;
+  return null;
+}
 
 export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const [tasks, setTasks] = useState<Task[]>(() => {
@@ -18,81 +26,98 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [showSyncSuccess, setShowSyncSuccess] = useState(false);
 
-  // Save tasks to local storage whenever they change
+  const tasksRef = useRef(tasks);
+  const syncingRef = useRef(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   useEffect(() => {
     saveTasks(tasks);
   }, [tasks]);
 
-  // Attempt to sync on app open if we have a valid cached token
-  useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
-
-    if (token && expiry && Date.now() < Number(expiry)) {
-      syncWithDrive(token, tasks);
-    }
-  }, []); // Only run once on mount
-
   async function syncWithDrive(token: string, currentTasks: Task[]) {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     try {
       setIsSyncing(true);
-      setSyncStatus("Syncing with Drive...");
       const mergedTasks = await syncTasksWithDrive(token, currentTasks);
-      
-      // Update local state with the merged result
       setTasks(mergedTasks);
-      
-      setSyncStatus("Successfully synced!");
-      setTimeout(() => setSyncStatus(null), 3000);
+      setSyncError(null);
+      setShowSyncSuccess(true);
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setShowSyncSuccess(false), 3000);
     } catch (error: any) {
       console.error("Error syncing to drive:", error);
-      setSyncStatus(`Sync failed: ${error.message}`);
-      
-      // Clear invalid tokens if unauthorized
-      if (error.message.includes("401") || error.message.includes("403")) {
+      setSyncError(error.message || "Unknown error");
+      if (error.message?.includes("401") || error.message?.includes("403")) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(TOKEN_EXPIRY_KEY);
       }
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
   }
 
+  function trySyncIfAuthenticated(currentTasks: Task[]) {
+    const token = getValidToken();
+    if (token) syncWithDrive(token, currentTasks);
+  }
+
+  // Sync on mount + every 5 minutes
+  useEffect(() => {
+    const token = getValidToken();
+    if (token) {
+      syncWithDrive(token, tasksRef.current);
+    } else {
+      setSyncError(
+        "Not signed in to Google Drive. Click \u2018Sync to Drive\u2019 to connect.",
+      );
+    }
+    const id = setInterval(() => {
+      trySyncIfAuthenticated(tasksRef.current);
+    }, SYNC_INTERVAL_MS);
+    return () => {
+      clearInterval(id);
+      clearTimeout(successTimerRef.current);
+    };
+  }, []);
+
   const login = useGoogleLogin({
     scope: "https://www.googleapis.com/auth/drive.file",
     onSuccess: (tokenResponse) => {
-      // Cache the token
-      const expiryTime = Date.now() + (tokenResponse.expires_in * 1000);
+      const expiryTime = Date.now() + tokenResponse.expires_in * 1000;
       localStorage.setItem(TOKEN_KEY, tokenResponse.access_token);
       localStorage.setItem(TOKEN_EXPIRY_KEY, expiryTime.toString());
-      
-      syncWithDrive(tokenResponse.access_token, tasks);
+      syncWithDrive(tokenResponse.access_token, tasksRef.current);
     },
     onError: (error) => {
       console.error("Login Failed:", error);
-      setSyncStatus("Login failed.");
-    }
+      setSyncError("Google login failed.");
+    },
   });
 
   function handleAddTask(task: Task) {
-    setTasks((prev) => [...prev, task]);
+    const newTasks = [...tasks, task];
+    setTasks(newTasks);
     setIsFormOpen(false);
+    trySyncIfAuthenticated(newTasks);
   }
 
   function handleCompleteTask(id: string) {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              completed: true,
-              updatedAt: new Date().toISOString(),
-            }
-          : task
-      )
+    const newTasks = tasks.map((t) =>
+      t.id === id
+        ? { ...t, completed: true, updatedAt: new Date().toISOString() }
+        : t,
     );
+    setTasks(newTasks);
+    trySyncIfAuthenticated(newTasks);
   }
 
   function handleExport() {
@@ -112,19 +137,37 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           <button type="button" className="secondary" onClick={handleExport}>
             Export as JSON
           </button>
-          <button 
-            type="button" 
-            className="secondary" 
+          <button
+            type="button"
+            className="secondary"
             onClick={() => login()}
             disabled={isSyncing}
           >
-            {isSyncing ? "Syncing..." : "Sync to Drive"}
+            {isSyncing ? "Syncing\u2026" : "Sync to Drive"}
           </button>
-          {syncStatus && <span style={{ fontSize: "0.85em", color: "#666" }}>{syncStatus}</span>}
+          {showSyncSuccess && !isSyncing && (
+            <span className="sync-status success">Synced</span>
+          )}
         </div>
       </header>
 
-      <main className={`app-main ${isFormOpen ? "layout-split" : "layout-centered"}`}>
+      {syncError && (
+        <div className="sync-error-banner">
+          <span>Sync failed: {syncError}</span>
+          <button
+            type="button"
+            className="sync-error-dismiss"
+            onClick={() => setSyncError(null)}
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      <main
+        className={`app-main ${isFormOpen ? "layout-split" : "layout-centered"}`}
+      >
         {isFormOpen ? (
           <>
             <div className="form-panel card">
@@ -161,11 +204,10 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
 
       <footer className="app-footer">
         <small>
-          Data is currently stored in your browser&apos;s local storage. You can manually
-          sync JSON files to your Google Drive.
+          Data is currently stored in your browser&apos;s local storage. You can
+          manually sync JSON files to your Google Drive.
         </small>
       </footer>
     </div>
   );
 };
-
