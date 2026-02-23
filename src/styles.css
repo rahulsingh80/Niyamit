@@ -180,6 +180,49 @@ body {
   color: #9ca3af;
 }
 
+/* ── Title input highlight ────────────────────────────── */
+
+.title-input-wrapper {
+  position: relative;
+}
+
+.title-input-wrapper input {
+  width: 100%;
+}
+
+.title-input-wrapper.has-highlight {
+  background: white;
+  border-radius: 0.55rem;
+}
+
+.title-input-wrapper.has-highlight input {
+  background: transparent;
+}
+
+.title-highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  white-space: nowrap;
+  overflow: hidden;
+  color: transparent;
+}
+
+.title-highlight mark {
+  color: transparent;
+  background: rgba(139, 164, 190, 0.22);
+  border-radius: 3px;
+}
+
+.date-hint {
+  font-size: 0.78rem;
+  color: #7090a8;
+}
+
 /* ── Form fields ─────────────────────────────────────── */
 
 .field {
