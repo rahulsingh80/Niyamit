@@ -3,35 +3,44 @@
 
 export type TaskPriority = 1 | 2 | 3 | 4;
 
+export interface RecurrenceRule {
+  type: "weekdays" | "interval" | "dayOfMonth" | "dayOfYear";
+  /** Day-of-week indices (0 = Sun … 6 = Sat). Used when type = 'weekdays'. */
+  weekdays?: number[];
+  /** Repeat every N days. Used when type = 'interval'. */
+  intervalDays?: number;
+  /** Day of the month (1–31). Used when type = 'dayOfMonth'. */
+  dayOfMonth?: number;
+  /** Month index (0–11). Used when type = 'dayOfYear'. */
+  month?: number;
+  /** Day within the month (1–31). Used when type = 'dayOfYear'. */
+  day?: number;
+  /** When the interval was derived from "every Nth <weekday>", stores the weekday for display. */
+  anchorWeekday?: number;
+}
+
 export interface Task {
   id: string;
   title: string;
   notes?: string;
   /**
    * ISO date string (YYYY-MM-DD) or null when no due date is set.
-   * Kept as string for easy JSON storage and cross-platform use.
+   * For recurring tasks this is the next upcoming occurrence.
    */
   dueDate: string | null;
   /**
    * Time of day (HH:MM, 24-hour) or undefined when no time is set.
-   * Only meaningful when dueDate is present.
    */
   dueTime?: string;
+  /**
+   * If present the task repeats according to this rule.
+   */
+  recurrence?: RecurrenceRule;
   /**
    * Lower number == higher priority (1 is highest, 4 is lowest).
    */
   priority: TaskPriority;
-  /**
-   * ISO datetime string for creation time.
-   */
   createdAt: string;
-  /**
-   * ISO datetime string for last update time.
-   */
   updatedAt?: string;
-  /**
-   * Completion flag kept simple for now.
-   */
   completed: boolean;
 }
-

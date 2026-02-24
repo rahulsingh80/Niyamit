@@ -1,6 +1,7 @@
 import React from "react";
 import type { Task } from "@domain/taskTypes";
 import { groupTasksByDate } from "@domain/taskSort";
+import { formatRecurrenceShort } from "@domain/dateParser";
 
 interface TaskListProps {
   tasks: Task[];
@@ -51,8 +52,24 @@ export const TaskList: React.FC<TaskListProps> = ({
                 <div className="task-item-content">
                   <div className="task-main">
                     <div className="task-title-row">
-                      <span className="task-title">{task.title}</span>
+                      <span className="task-title">
+                        {task.recurrence && (
+                          <span
+                            className="recurring-icon"
+                            title={formatRecurrenceShort(task.recurrence)}
+                            aria-label="Recurring task"
+                          >
+                            ↻
+                          </span>
+                        )}
+                        {task.title}
+                      </span>
                       <span className="task-pills">
+                        {task.recurrence && (
+                          <span className="pill recurrence-pill">
+                            {formatRecurrenceShort(task.recurrence)}
+                          </span>
+                        )}
                         {task.dueTime && (
                           <span className="pill time-pill">{task.dueTime}</span>
                         )}

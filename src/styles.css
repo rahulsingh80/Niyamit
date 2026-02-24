@@ -512,3 +512,123 @@ button {
 .created-at {
   opacity: 0.9;
 }
+
+/* ── Recurring icon & pill ───────────────────────────── */
+
+.recurring-icon {
+  display: inline-block;
+  margin-right: 0.35rem;
+  font-size: 0.95em;
+  color: #6b8fa8;
+  vertical-align: middle;
+  font-weight: 600;
+}
+
+.recurrence-pill {
+  font-size: 0.7rem;
+  background: #eef6fa;
+  border-color: #c8dde8;
+  color: #4a7a94;
+  white-space: nowrap;
+}
+
+/* ── When section ────────────────────────────────────── */
+
+.when-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.65rem;
+  padding: 0.75rem 0.85rem 0.5rem;
+  margin: 0 0 0.85rem;
+}
+
+.when-section legend {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #6b7280;
+  padding: 0 0.3rem;
+}
+
+.when-mode-toggle {
+  display: flex;
+  gap: 0.15rem;
+  background: #f3f4f6;
+  border-radius: 0.45rem;
+  padding: 0.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.when-mode-toggle label {
+  flex: 1;
+  text-align: center;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.when-mode-toggle label.active {
+  background: white;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.when-mode-toggle input[type="radio"] {
+  display: none;
+}
+
+/* ── Weekday picker ──────────────────────────────────── */
+
+.weekday-picker {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.weekday-chip {
+  min-width: 2.5rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.78rem;
+  border-radius: 0.4rem;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.weekday-chip:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+}
+
+.weekday-chip.active {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #3730a3;
+  font-weight: 500;
+}
+
+/* ── Recurring options misc ──────────────────────────── */
+
+.recurring-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.inline-field input {
+  width: 5rem;
+}
+
+.field-suffix {
+  font-size: 0.85rem;
+  color: #6b7280;
+}

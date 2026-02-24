@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import type { Task } from "@domain/taskTypes";
+import { advanceRecurrence } from "@domain/dateParser";
 import { loadTasks, saveTasks } from "@services/localStorageService";
 import { exportTasksAsJson } from "@services/exportService";
 import { syncTasksWithDrive } from "@services/googleDriveService";
@@ -111,11 +112,33 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   }
 
   function handleCompleteTask(id: string) {
-    const newTasks = tasks.map((t) =>
-      t.id === id
-        ? { ...t, completed: true, updatedAt: new Date().toISOString() }
-        : t,
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    const nowIso = new Date().toISOString();
+    let newTasks = tasks.map((t) =>
+      t.id === id ? { ...t, completed: true, updatedAt: nowIso } : t,
     );
+
+    if (task.recurrence && task.dueDate) {
+      const nextDate = advanceRecurrence(task.recurrence, task.dueDate);
+      const nextTask: Task = {
+        id: crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`,
+        title: task.title,
+        notes: task.notes,
+        dueDate: nextDate,
+        dueTime: task.dueTime,
+        recurrence: task.recurrence,
+        priority: task.priority,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        completed: false,
+      };
+      newTasks = [...newTasks, nextTask];
+    }
+
     setTasks(newTasks);
     trySyncIfAuthenticated(newTasks);
   }

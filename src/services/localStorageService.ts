@@ -21,6 +21,7 @@ export function loadTasks(): Task[] {
       ...task,
       dueDate: task.dueDate ?? null,
       dueTime: task.dueTime || undefined,
+      recurrence: task.recurrence || undefined,
       completed: task.completed ?? false,
     }));
   } catch {
