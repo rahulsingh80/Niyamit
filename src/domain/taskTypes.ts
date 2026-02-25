@@ -43,4 +43,5 @@ export interface Task {
   createdAt: string;
   updatedAt?: string;
   completed: boolean;
+  deleted?: boolean;
 }

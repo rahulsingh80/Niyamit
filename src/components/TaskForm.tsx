@@ -1,4 +1,4 @@
-import React, { useState, FormEvent } from "react";
+import React, { useState, useEffect, useRef, FormEvent } from "react";
 import type { Task, TaskPriority, RecurrenceRule } from "@domain/taskTypes";
 import {
   parseTitleInput,
@@ -9,6 +9,10 @@ import {
 
 interface TaskFormProps {
   onAdd(task: Task): void;
+  editingTask?: Task | null;
+  onUpdate?(task: Task): void;
+  onDelete?(id: string): void;
+  onCancelEdit?(): void;
 }
 
 const DEFAULT_PRIORITY: TaskPriority = 3;
@@ -27,18 +31,24 @@ function toDateStr(d: Date): string {
   );
 }
 
-export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
+export const TaskForm: React.FC<TaskFormProps> = ({
+  onAdd,
+  editingTask,
+  onUpdate,
+  onDelete,
+  onCancelEdit,
+}) => {
+  const isEditMode = editingTask != null;
+
   // ── State ───────────────────────────────────────────────
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState<TaskPriority>(DEFAULT_PRIORITY);
 
-  // Schedule: one-time vs recurring
   const [whenMode, setWhenMode] = useState<"one-time" | "recurring">("one-time");
   const [dueDate, setDueDate] = useState("");
   const [dueTime, setDueTime] = useState("");
 
-  // Recurrence form state
   const [recType, setRecType] = useState<RecurrenceRule["type"]>("weekdays");
   const [recWeekdays, setRecWeekdays] = useState<number[]>([]);
   const [recIntervalDays, setRecIntervalDays] = useState(1);
@@ -46,10 +56,53 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
   const [recMonth, setRecMonth] = useState(0);
   const [recDay, setRecDay] = useState(1);
 
-  // Override flags
   const [scheduleOverridden, setScheduleOverridden] = useState(false);
   const [priorityOverridden, setPriorityOverridden] = useState(false);
   const [timeManuallySet, setTimeManuallySet] = useState(false);
+
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Populate form when editingTask changes
+  useEffect(() => {
+    if (!editingTask) {
+      resetForm();
+      return;
+    }
+
+    setTitle(editingTask.title);
+    setNotes(editingTask.notes || "");
+    setPriority(editingTask.priority);
+    setDueTime(editingTask.dueTime || "");
+
+    setScheduleOverridden(true);
+    setPriorityOverridden(true);
+    setTimeManuallySet(!!editingTask.dueTime);
+
+    if (editingTask.recurrence) {
+      setWhenMode("recurring");
+      setRecType(editingTask.recurrence.type);
+      setRecWeekdays(editingTask.recurrence.weekdays || []);
+      setRecIntervalDays(editingTask.recurrence.intervalDays || 1);
+      setRecDayOfMonth(editingTask.recurrence.dayOfMonth || 1);
+      setRecMonth(editingTask.recurrence.month || 0);
+      setRecDay(editingTask.recurrence.day || 1);
+      setDueDate(editingTask.dueDate || "");
+    } else {
+      setWhenMode("one-time");
+      setDueDate(editingTask.dueDate || "");
+      setRecType("weekdays");
+      setRecWeekdays([]);
+      setRecIntervalDays(1);
+      setRecDayOfMonth(1);
+      setRecMonth(0);
+      setRecDay(1);
+    }
+
+    requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    });
+  }, [editingTask]);
 
   // ── Parsed state ────────────────────────────────────────
   const parsed = parseTitleInput(title);
@@ -125,14 +178,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
     event.preventDefault();
     if (!title.trim()) return;
 
-    // Determine final time
     const finalTime = timeManuallySet
       ? dueTime || undefined
       : hasScheduleMatch
         ? parsed.dueTime
         : dueTime || undefined;
 
-    // Determine final schedule
     let finalDate: string | null;
     let finalRecurrence: RecurrenceRule | undefined;
 
@@ -153,7 +204,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
 
     const finalPriority = displayPriority;
 
-    // Build final title by removing matched spans
     const spansToRemove: [number, number][] = [];
     if (hasScheduleMatch && parsed.scheduleSpan)
       spansToRemove.push(parsed.scheduleSpan);
@@ -178,22 +228,37 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
     if (!finalTitle) return;
 
     const nowIso = new Date().toISOString();
-    const newTask: Task = {
-      id: crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`,
-      title: finalTitle,
-      notes: notes.trim() || undefined,
-      dueDate: finalDate,
-      dueTime: finalTime,
-      recurrence: finalRecurrence,
-      priority: finalPriority,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      completed: false,
-    };
 
-    onAdd(newTask);
+    if (isEditMode && editingTask && onUpdate) {
+      const updatedTask: Task = {
+        ...editingTask,
+        title: finalTitle,
+        notes: notes.trim() || undefined,
+        dueDate: finalDate,
+        dueTime: finalTime,
+        recurrence: finalRecurrence,
+        priority: finalPriority,
+        updatedAt: nowIso,
+      };
+      onUpdate(updatedTask);
+    } else {
+      const newTask: Task = {
+        id: crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`,
+        title: finalTitle,
+        notes: notes.trim() || undefined,
+        dueDate: finalDate,
+        dueTime: finalTime,
+        recurrence: finalRecurrence,
+        priority: finalPriority,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        completed: false,
+      };
+      onAdd(newTask);
+    }
+
     resetForm();
   }
 
@@ -296,6 +361,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
         >
           {hasAnyHighlight && renderHighlight()}
           <input
+            ref={titleInputRef}
             id="title"
             type="text"
             value={title}
@@ -506,9 +572,29 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onAdd }) => {
         </div>
       </div>
 
-      <button type="submit" className="primary">
-        Add task
-      </button>
+      <div className={`form-actions${isEditMode ? " edit-mode" : ""}`}>
+        <button type="submit" className="primary">
+          {isEditMode ? "Save changes" : "Add task"}
+        </button>
+        {isEditMode && (
+          <>
+            <button
+              type="button"
+              className="danger-outline"
+              onClick={() => onDelete?.(editingTask!.id)}
+            >
+              Delete task
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={onCancelEdit}
+            >
+              Cancel
+            </button>
+          </>
+        )}
+      </div>
     </form>
   );
 };

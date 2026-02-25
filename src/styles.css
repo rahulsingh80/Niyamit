@@ -632,3 +632,89 @@ button {
   font-size: 0.85rem;
   color: #6b7280;
 }
+
+/* ── Undo/Redo buttons ──────────────────────────────── */
+
+.undo-redo-group {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.icon-btn {
+  background: transparent;
+  font-size: 1.15rem;
+  color: #6b7280;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.45rem;
+  line-height: 1;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #111827;
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Selected task ──────────────────────────────────── */
+
+.task-item.task-selected {
+  background: rgba(79, 70, 229, 0.06);
+  box-shadow: inset 3px 0 0 #8ba4be;
+}
+
+/* ── Undo/redo highlight flash ──────────────────────── */
+
+@keyframes highlight-flash {
+  0% { background: rgba(139, 164, 190, 0.35); }
+  100% { background: transparent; }
+}
+
+.task-item.task-highlight-flash {
+  animation: highlight-flash 1.2s ease-out;
+}
+
+/* ── Form action buttons ────────────────────────────── */
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.form-actions.edit-mode {
+  padding-top: 0.25rem;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 0.25rem;
+}
+
+.danger-outline {
+  background: transparent;
+  color: #b07070;
+  border: 1px solid #e0c8c8;
+  font-size: 0.88rem;
+}
+
+.danger-outline:hover {
+  background: #fdf4f4;
+  border-color: #d0b0b0;
+  color: #996060;
+}
+
+.ghost {
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.88rem;
+}
+
+.ghost:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
