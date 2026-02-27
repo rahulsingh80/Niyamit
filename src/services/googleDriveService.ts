@@ -10,6 +10,20 @@ interface DriveFile {
   name: string;
 }
 
+export interface TaskConflict {
+  taskId: string;
+  fields: string[];
+  baseTask?: Task;
+  localTask?: Task;
+  remoteTask?: Task;
+  reason: "field-conflict" | "delete-conflict" | "new-task-conflict";
+}
+
+export interface MergeTasksResult {
+  mergedTasks: Task[];
+  conflicts: TaskConflict[];
+}
+
 /**
  * Searches for a file or folder by name. If parentId is provided, searches inside that folder.
  */
@@ -155,7 +169,7 @@ async function downloadJsonFile(
 /**
  * Merges local tasks with remote tasks based on updatedAt timestamp.
  */
-function mergeTasks(localTasks: Task[], remoteTasks: Task[]): Task[] {
+export function mergeTasksByUpdatedAt(localTasks: Task[], remoteTasks: Task[]): Task[] {
   const map = new Map<string, Task>();
   for (const t of remoteTasks) {
     map.set(t.id, t);
@@ -173,6 +187,189 @@ function mergeTasks(localTasks: Task[], remoteTasks: Task[]): Task[] {
     }
   }
   return Array.from(map.values());
+}
+
+function areEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function asTaskMap(tasks: Task[]): Map<string, Task> {
+  return new Map(tasks.map((t) => [t.id, t]));
+}
+
+function listTaskKeys(base?: Task, local?: Task, remote?: Task): string[] {
+  const keys = new Set<string>();
+  for (const obj of [base, local, remote]) {
+    if (!obj) continue;
+    for (const key of Object.keys(obj)) keys.add(key);
+  }
+  return Array.from(keys);
+}
+
+function mergeTaskThreeWay(
+  baseTask: Task | undefined,
+  localTask: Task | undefined,
+  remoteTask: Task | undefined
+): { mergedTask?: Task; conflict?: TaskConflict } {
+  const taskId = localTask?.id || remoteTask?.id || baseTask?.id;
+  if (!taskId) return {};
+
+  if (!baseTask) {
+    if (!localTask && !remoteTask) return {};
+    if (!localTask) return { mergedTask: remoteTask };
+    if (!remoteTask) return { mergedTask: localTask };
+    if (areEqual(localTask, remoteTask)) return { mergedTask: localTask };
+    return {
+      conflict: {
+        taskId,
+        fields: listTaskKeys(undefined, localTask, remoteTask),
+        localTask,
+        remoteTask,
+        reason: "new-task-conflict",
+      },
+    };
+  }
+
+  const localChanged = !areEqual(localTask, baseTask);
+  const remoteChanged = !areEqual(remoteTask, baseTask);
+
+  if (!localChanged && !remoteChanged) return { mergedTask: baseTask };
+  if (localChanged && !remoteChanged) return { mergedTask: localTask };
+  if (!localChanged && remoteChanged) return { mergedTask: remoteTask };
+
+  if (!localTask || !remoteTask) {
+    return {
+      conflict: {
+        taskId,
+        fields: listTaskKeys(baseTask, localTask, remoteTask),
+        baseTask,
+        localTask,
+        remoteTask,
+        reason: "delete-conflict",
+      },
+    };
+  }
+
+  if (areEqual(localTask, remoteTask)) return { mergedTask: localTask };
+
+  const keys = listTaskKeys(baseTask, localTask, remoteTask);
+  const merged: Record<string, unknown> = {};
+  const conflictingFields: string[] = [];
+
+  for (const key of keys) {
+    const baseValue = (baseTask as Record<string, unknown>)[key];
+    const localValue = (localTask as Record<string, unknown>)[key];
+    const remoteValue = (remoteTask as Record<string, unknown>)[key];
+
+    const localFieldChanged = !areEqual(localValue, baseValue);
+    const remoteFieldChanged = !areEqual(remoteValue, baseValue);
+
+    if (localFieldChanged && !remoteFieldChanged) {
+      merged[key] = localValue;
+      continue;
+    }
+    if (!localFieldChanged && remoteFieldChanged) {
+      merged[key] = remoteValue;
+      continue;
+    }
+    if (!localFieldChanged && !remoteFieldChanged) {
+      merged[key] = baseValue;
+      continue;
+    }
+
+    if (areEqual(localValue, remoteValue)) {
+      merged[key] = localValue;
+    } else {
+      conflictingFields.push(key);
+    }
+  }
+
+  if (conflictingFields.length > 0) {
+    return {
+      conflict: {
+        taskId,
+        fields: conflictingFields,
+        baseTask,
+        localTask,
+        remoteTask,
+        reason: "field-conflict",
+      },
+    };
+  }
+
+  return { mergedTask: merged as Task };
+}
+
+export function mergeTasksThreeWay(
+  baseTasks: Task[],
+  localTasks: Task[],
+  remoteTasks: Task[]
+): MergeTasksResult {
+  const baseMap = asTaskMap(baseTasks);
+  const localMap = asTaskMap(localTasks);
+  const remoteMap = asTaskMap(remoteTasks);
+
+  const allIds = new Set<string>([
+    ...baseMap.keys(),
+    ...localMap.keys(),
+    ...remoteMap.keys(),
+  ]);
+
+  const mergedMap = new Map<string, Task>();
+  const conflicts: TaskConflict[] = [];
+
+  for (const id of allIds) {
+    const result = mergeTaskThreeWay(baseMap.get(id), localMap.get(id), remoteMap.get(id));
+    if (result.conflict) {
+      conflicts.push(result.conflict);
+      continue;
+    }
+    if (result.mergedTask) mergedMap.set(id, result.mergedTask);
+  }
+
+  return {
+    mergedTasks: Array.from(mergedMap.values()),
+    conflicts,
+  };
+}
+
+export async function getOrCreateTasksFileId(accessToken: string): Promise<string> {
+  let folder = await searchFileOrFolder(
+    accessToken,
+    FOLDER_NAME,
+    "application/vnd.google-apps.folder"
+  );
+  let folderId = folder?.id;
+
+  if (!folderId) {
+    folderId = await createFolder(accessToken, FOLDER_NAME);
+  }
+
+  const file = await searchFileOrFolder(
+    accessToken,
+    FILE_NAME,
+    "application/json",
+    folderId
+  );
+
+  if (file?.id) return file.id;
+
+  return createJsonFile(accessToken, FILE_NAME, folderId, JSON.stringify([], null, 2));
+}
+
+export async function downloadTasksFromDrive(
+  accessToken: string,
+  fileId: string
+): Promise<Task[]> {
+  return downloadJsonFile(accessToken, fileId);
+}
+
+export async function uploadTasksToDrive(
+  accessToken: string,
+  fileId: string,
+  tasks: Task[]
+): Promise<void> {
+  await updateJsonFile(accessToken, fileId, JSON.stringify(tasks, null, 2));
 }
 
 /**
@@ -250,7 +447,7 @@ export async function syncTasksWithDrive(
 
   if (file?.id) {
     const remoteTasks = await downloadJsonFile(accessToken, file.id);
-    mergedTasks = mergeTasks(localTasks, remoteTasks);
+    mergedTasks = mergeTasksByUpdatedAt(localTasks, remoteTasks);
     
     const jsonContent = JSON.stringify(mergedTasks, null, 2);
     await updateJsonFile(accessToken, file.id, jsonContent);

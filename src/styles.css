@@ -117,10 +117,42 @@ body {
 
 .sync-status {
   font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #6b7280;
+}
+
+.sync-status .sync-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: #9ca3af;
+}
+
+.sync-status.active {
+  color: #5b7796;
+}
+
+.sync-status.active .sync-dot {
+  background: #8ba4be;
+  animation: sync-pulse 1.4s ease-in-out infinite;
 }
 
 .sync-status.success {
   color: #5a7a5a;
+}
+
+.sync-status.success .sync-dot {
+  background: #86b386;
+}
+
+.sync-status.warning {
+  color: #996060;
+}
+
+.sync-status.warning .sync-dot {
+  background: #c68f8f;
 }
 
 .sync-error-banner {
@@ -148,6 +180,79 @@ body {
 
 .sync-error-dismiss:hover {
   background: #f0e0e0;
+}
+
+.sync-conflict-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 20;
+}
+
+.sync-conflict-modal {
+  width: min(780px, 100%);
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.sync-conflict-modal h3 {
+  margin: 0 0 0.5rem;
+}
+
+.sync-conflict-subtitle {
+  margin: 0 0 1rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.sync-conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.sync-conflict-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.sync-conflict-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sync-conflict-fields {
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.sync-conflict-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sync-conflict-footer {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@keyframes sync-pulse {
+  0% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.5; transform: scale(0.95); }
 }
 
 /* ── Footer ──────────────────────────────────────────── */
