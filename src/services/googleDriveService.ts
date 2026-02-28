@@ -257,9 +257,9 @@ function mergeTaskThreeWay(
   const conflictingFields: string[] = [];
 
   for (const key of keys) {
-    const baseValue = (baseTask as Record<string, unknown>)[key];
-    const localValue = (localTask as Record<string, unknown>)[key];
-    const remoteValue = (remoteTask as Record<string, unknown>)[key];
+    const baseValue = (baseTask as unknown as Record<string, unknown>)[key];
+    const localValue = (localTask as unknown as Record<string, unknown>)[key];
+    const remoteValue = (remoteTask as unknown as Record<string, unknown>)[key];
 
     const localFieldChanged = !areEqual(localValue, baseValue);
     const remoteFieldChanged = !areEqual(remoteValue, baseValue);
@@ -297,7 +297,7 @@ function mergeTaskThreeWay(
     };
   }
 
-  return { mergedTask: merged as Task };
+  return { mergedTask: merged as unknown as Task };
 }
 
 export function mergeTasksThreeWay(

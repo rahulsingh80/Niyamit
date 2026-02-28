@@ -44,4 +44,10 @@ export interface Task {
   updatedAt?: string;
   completed: boolean;
   deleted?: boolean;
+  /**
+   * Tasks sharing the same cloneGroupId are clones of each other.
+   * Changes (except title) propagate across the group.
+   * Completing one completes all. Changing the title detaches the clone.
+   */
+  cloneGroupId?: string;
 }

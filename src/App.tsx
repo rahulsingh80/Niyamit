@@ -274,7 +274,35 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
 
   function handleUpdateTask(updated: Task) {
     pushUndo(tasks);
-    const newTasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    const original = tasks.find((t) => t.id === updated.id);
+    let newTasks: Task[];
+
+    if (original?.cloneGroupId && updated.title !== original.title) {
+      // Title changed — detach from clone group
+      const detached = { ...updated, cloneGroupId: undefined };
+      newTasks = tasks.map((t) => (t.id === updated.id ? detached : t));
+      cleanupSingletonCloneGroup(newTasks, original.cloneGroupId, updated.id);
+    } else if (original?.cloneGroupId) {
+      // Non-title change — propagate to all clones in the group
+      newTasks = tasks.map((t) => {
+        if (t.id === updated.id) return updated;
+        if (t.cloneGroupId === original.cloneGroupId && !t.completed && !t.deleted) {
+          return {
+            ...t,
+            notes: updated.notes,
+            dueDate: updated.dueDate,
+            dueTime: updated.dueTime,
+            recurrence: updated.recurrence,
+            priority: updated.priority,
+            updatedAt: updated.updatedAt,
+          };
+        }
+        return t;
+      });
+    } else {
+      newTasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    }
+
     applyLocalChange(newTasks);
     setEditingTask(null);
     setIsFormOpen(false);
@@ -298,31 +326,54 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     pushUndo(tasks);
 
     const nowIso = new Date().toISOString();
-    let newTasks = tasks.map((t) =>
-      t.id === id ? { ...t, completed: true, updatedAt: nowIso } : t,
-    );
 
-    if (task.recurrence && task.dueDate) {
-      const nextDate = advanceRecurrence(task.recurrence, task.dueDate);
-      const nextTask: Task = {
-        id: crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random()}`,
-        title: task.title,
-        notes: task.notes,
-        dueDate: nextDate,
-        dueTime: task.dueTime,
-        recurrence: task.recurrence,
-        priority: task.priority,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        completed: false,
-      };
-      newTasks = [...newTasks, nextTask];
+    // Gather all tasks to complete: the task itself + its active clones
+    const idsToComplete = new Set([id]);
+    if (task.cloneGroupId) {
+      for (const t of tasks) {
+        if (
+          t.cloneGroupId === task.cloneGroupId &&
+          !t.completed &&
+          !t.deleted
+        ) {
+          idsToComplete.add(t.id);
+        }
+      }
     }
 
-    // If we were editing this task, close the form
-    if (editingTask?.id === id) {
+    let newTasks = tasks.map((t) =>
+      idsToComplete.has(t.id)
+        ? { ...t, completed: true, updatedAt: nowIso }
+        : t,
+    );
+
+    // Create next recurring instances for each completed task that recurs
+    const nextTasks: Task[] = [];
+    for (const cid of idsToComplete) {
+      const ct = tasks.find((t) => t.id === cid);
+      if (ct?.recurrence && ct.dueDate) {
+        const nextDate = advanceRecurrence(ct.recurrence, ct.dueDate);
+        nextTasks.push({
+          id: crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`,
+          title: ct.title,
+          notes: ct.notes,
+          dueDate: nextDate,
+          dueTime: ct.dueTime,
+          recurrence: ct.recurrence,
+          priority: ct.priority,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          completed: false,
+        });
+      }
+    }
+    if (nextTasks.length > 0) {
+      newTasks = [...newTasks, ...nextTasks];
+    }
+
+    if (editingTask && idsToComplete.has(editingTask.id)) {
       setEditingTask(null);
       setIsFormOpen(false);
     }
@@ -353,6 +404,86 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   function handleOpenCreateForm() {
     setEditingTask(null);
     setIsFormOpen(true);
+  }
+
+  // ── Clone / Un-clone ──────────────────────────────────
+
+  function handleCloneTask(id: string) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+
+    pushUndo(tasks);
+
+    const nowIso = new Date().toISOString();
+    const groupId = task.cloneGroupId || (
+      crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+    );
+
+    const clonedTask: Task = {
+      ...task,
+      id: crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+      cloneGroupId: groupId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      completed: false,
+      deleted: undefined,
+    };
+
+    // Ensure the original also has the group id
+    const newTasks = tasks.map((t) =>
+      t.id === id ? { ...t, cloneGroupId: groupId, updatedAt: nowIso } : t,
+    );
+    newTasks.push(clonedTask);
+
+    applyLocalChange(newTasks);
+  }
+
+  function handleUncloneTask(id: string) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task?.cloneGroupId) return;
+
+    pushUndo(tasks);
+
+    const nowIso = new Date().toISOString();
+    const groupId = task.cloneGroupId;
+    let newTasks = tasks.map((t) =>
+      t.id === id
+        ? { ...t, cloneGroupId: undefined, updatedAt: nowIso }
+        : t,
+    );
+
+    cleanupSingletonCloneGroup(newTasks, groupId, id);
+
+    // Re-read after cleanup (cleanupSingletonCloneGroup mutates in place)
+    applyLocalChange(newTasks);
+
+    if (editingTask?.id === id) {
+      const updated = newTasks.find((t) => t.id === id);
+      if (updated) setEditingTask(updated);
+    }
+  }
+
+  /**
+   * If removing a task from a clone group leaves only one member,
+   * that remaining task should also lose its cloneGroupId.
+   * Mutates the array in place for convenience.
+   */
+  function cleanupSingletonCloneGroup(
+    taskList: Task[],
+    groupId: string,
+    excludeId: string,
+  ) {
+    const remaining = taskList.filter(
+      (t) => t.cloneGroupId === groupId && t.id !== excludeId && !t.completed && !t.deleted,
+    );
+    if (remaining.length === 1) {
+      const idx = taskList.findIndex((t) => t.id === remaining[0].id);
+      if (idx !== -1) {
+        taskList[idx] = { ...taskList[idx], cloneGroupId: undefined };
+      }
+    }
   }
 
   // ── Undo / Redo ───────────────────────────────────────
@@ -617,6 +748,8 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
               tasks={tasks}
               onCompleteTask={handleCompleteTask}
               onSelectTask={handleSelectTask}
+              onCloneTask={handleCloneTask}
+              onUncloneTask={handleUncloneTask}
               selectedTaskId={editingTask?.id}
               highlightedTaskId={highlightedTaskId}
             />
@@ -635,6 +768,8 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
                 tasks={tasks}
                 onCompleteTask={handleCompleteTask}
                 onSelectTask={handleSelectTask}
+                onCloneTask={handleCloneTask}
+                onUncloneTask={handleUncloneTask}
                 highlightedTaskId={highlightedTaskId}
               />
             </div>
