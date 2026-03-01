@@ -1,20 +1,19 @@
 import type { Task } from "@domain/taskTypes";
+import type { Project } from "@domain/projectTypes";
 
 /**
- * Export tasks to a JSON file and trigger a download in the browser.
+ * Export tasks and projects to a JSON file and trigger a download in the browser.
  */
-export function exportTasksAsJson(
+export function exportDataAsJson(
   tasks: Task[],
-  filename = "niyamit-tasks.json"
+  projects: Project[],
+  filename = "niyamit-data.json"
 ) {
   if (typeof window === "undefined") return;
 
-  const activeTasks = tasks.filter((task) => !task.completed);
-  const completedTasks = tasks.filter((task) => task.completed);
-
   const backup = {
-    activeTasks,
-    completedTasks,
+    tasks,
+    projects,
   };
 
   const json = JSON.stringify(backup, null, 2);
@@ -30,4 +29,3 @@ export function exportTasksAsJson(
 
   URL.revokeObjectURL(url);
 }
-

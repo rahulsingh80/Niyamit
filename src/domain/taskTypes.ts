@@ -50,4 +50,6 @@ export interface Task {
    * Completing one completes all. Changing the title detaches the clone.
    */
   cloneGroupId?: string;
+  /** The project this task belongs to (at most one). */
+  projectId?: string;
 }

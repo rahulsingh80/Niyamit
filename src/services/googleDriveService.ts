@@ -1,9 +1,13 @@
 import type { Task } from "@domain/taskTypes";
+import type { Project } from "@domain/projectTypes";
+import type { AppData } from "@services/localStorageService";
 
 const DRIVE_API_URL = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_NAME = "Niyamit";
-const FILE_NAME = "tasks.json";
+const DATA_FILE_NAME = "niyamit-data.json";
+const LEGACY_TASKS_FILE = "tasks.json";
+const LEGACY_PROJECTS_FILE = "projects.json";
 
 interface DriveFile {
   id: string;
@@ -24,9 +28,13 @@ export interface MergeTasksResult {
   conflicts: TaskConflict[];
 }
 
-/**
- * Searches for a file or folder by name. If parentId is provided, searches inside that folder.
- */
+export interface MergeAppDataResult {
+  mergedData: AppData;
+  conflicts: TaskConflict[];
+}
+
+// ── Low-level Drive helpers ─────────────────────────────
+
 async function searchFileOrFolder(
   accessToken: string,
   name: string,
@@ -34,146 +42,136 @@ async function searchFileOrFolder(
   parentId?: string
 ): Promise<DriveFile | null> {
   let query = `name = '${name}' and mimeType = '${mimeType}' and trashed = false`;
-  if (parentId) {
-    query += ` and '${parentId}' in parents`;
-  }
-
+  if (parentId) query += ` and '${parentId}' in parents`;
   const response = await fetch(
     `${DRIVE_API_URL}/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name)`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-
-  if (!response.ok) {
-    throw new Error(`${response.status} Failed to search Drive: ${response.statusText}`);
-  }
-
+  if (!response.ok) throw new Error(`${response.status} Failed to search Drive: ${response.statusText}`);
   const data = await response.json();
-  return data.files && data.files.length > 0 ? data.files[0] : null;
+  return data.files?.[0] ?? null;
 }
 
-/**
- * Creates the Niyamit folder in the root of Google Drive.
- */
 async function createFolder(accessToken: string, name: string): Promise<string> {
-  const metadata = {
-    name,
-    mimeType: "application/vnd.google-apps.folder",
-  };
-
   const response = await fetch(`${DRIVE_API_URL}/files`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(metadata),
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder" }),
   });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} Failed to create folder: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  return data.id;
+  if (!response.ok) throw new Error(`${response.status} Failed to create folder: ${response.statusText}`);
+  return (await response.json()).id;
 }
 
-/**
- * Uploads a new JSON file to the specified folder.
- */
 async function createJsonFile(
-  accessToken: string,
-  name: string,
-  folderId: string,
-  content: string
+  accessToken: string, name: string, folderId: string, content: string
 ): Promise<string> {
-  const metadata = {
-    name,
-    parents: [folderId],
-  };
-
   const form = new FormData();
-  form.append(
-    "metadata",
-    new Blob([JSON.stringify(metadata)], { type: "application/json" })
-  );
+  form.append("metadata", new Blob([JSON.stringify({ name, parents: [folderId] })], { type: "application/json" }));
   form.append("file", new Blob([content], { type: "application/json" }));
-
   const response = await fetch(`${DRIVE_UPLOAD_URL}/files?uploadType=multipart`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
   });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} Failed to create file: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  return data.id;
+  if (!response.ok) throw new Error(`${response.status} Failed to create file: ${response.statusText}`);
+  return (await response.json()).id;
 }
 
-/**
- * Updates an existing JSON file.
- */
-async function updateJsonFile(
-  accessToken: string,
-  fileId: string,
-  content: string
-): Promise<void> {
+async function updateJsonFile(accessToken: string, fileId: string, content: string): Promise<void> {
   const response = await fetch(`${DRIVE_UPLOAD_URL}/files/${fileId}?uploadType=media`, {
     method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: content,
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to update file: ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(`Failed to update file: ${response.statusText}`);
 }
 
-/**
- * Downloads the content of an existing JSON file.
- */
-async function downloadJsonFile(
-  accessToken: string,
-  fileId: string
-): Promise<Task[]> {
+async function downloadJsonFileRaw(accessToken: string, fileId: string): Promise<unknown> {
   const response = await fetch(`${DRIVE_API_URL}/files/${fileId}?alt=media`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} Failed to download file: ${response.statusText}`);
-  }
-
+  if (!response.ok) throw new Error(`${response.status} Failed to download file: ${response.statusText}`);
   const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : [];
-  } catch (err) {
-    console.error("Failed to parse tasks from Drive", err);
-    return [];
-  }
+  try { return text ? JSON.parse(text) : null; }
+  catch { return null; }
 }
 
+async function getOrCreateFolderId(accessToken: string): Promise<string> {
+  const folder = await searchFileOrFolder(accessToken, FOLDER_NAME, "application/vnd.google-apps.folder");
+  return folder?.id ?? await createFolder(accessToken, FOLDER_NAME);
+}
+
+// ── Public API ──────────────────────────────────────────
+
 /**
- * Merges local tasks with remote tasks based on updatedAt timestamp.
+ * Gets or creates the unified data file. If the new file doesn't exist but
+ * legacy tasks.json / projects.json do, migrates them into the new file.
  */
+export async function getOrCreateDataFileId(accessToken: string): Promise<string> {
+  const folderId = await getOrCreateFolderId(accessToken);
+
+  const dataFile = await searchFileOrFolder(accessToken, DATA_FILE_NAME, "application/json", folderId);
+  if (dataFile?.id) return dataFile.id;
+
+  // Migrate from legacy separate files
+  let tasks: Task[] = [];
+  let projects: Project[] = [];
+
+  const legacyTasks = await searchFileOrFolder(accessToken, LEGACY_TASKS_FILE, "application/json", folderId);
+  if (legacyTasks?.id) {
+    const raw = await downloadJsonFileRaw(accessToken, legacyTasks.id);
+    if (Array.isArray(raw)) tasks = raw as Task[];
+  }
+
+  const legacyProjects = await searchFileOrFolder(accessToken, LEGACY_PROJECTS_FILE, "application/json", folderId);
+  if (legacyProjects?.id) {
+    const raw = await downloadJsonFileRaw(accessToken, legacyProjects.id);
+    if (Array.isArray(raw)) projects = raw as Project[];
+  }
+
+  const initial: AppData = { tasks, projects };
+  return createJsonFile(accessToken, DATA_FILE_NAME, folderId, JSON.stringify(initial, null, 2));
+}
+
+export async function downloadAppDataFromDrive(accessToken: string, fileId: string): Promise<AppData> {
+  const raw = await downloadJsonFileRaw(accessToken, fileId);
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const obj = raw as Record<string, unknown>;
+    return {
+      tasks: Array.isArray(obj.tasks) ? obj.tasks as Task[] : [],
+      projects: Array.isArray(obj.projects) ? obj.projects as Project[] : [],
+    };
+  }
+  // Handle legacy format: bare Task[]
+  if (Array.isArray(raw)) return { tasks: raw as Task[], projects: [] };
+  return { tasks: [], projects: [] };
+}
+
+export async function uploadAppDataToDrive(accessToken: string, fileId: string, data: AppData): Promise<void> {
+  await updateJsonFile(accessToken, fileId, JSON.stringify(data, null, 2));
+}
+
+// ── Merge logic ─────────────────────────────────────────
+
+export function mergeProjectsByUpdatedAt(localProjects: Project[], remoteProjects: Project[]): Project[] {
+  const map = new Map<string, Project>();
+  for (const p of remoteProjects) map.set(p.id, p);
+  for (const p of localProjects) {
+    const existing = map.get(p.id);
+    if (!existing) {
+      map.set(p.id, p);
+    } else {
+      const localTime = new Date(p.updatedAt || p.createdAt).getTime();
+      const remoteTime = new Date(existing.updatedAt || existing.createdAt).getTime();
+      if (localTime > remoteTime) map.set(p.id, p);
+    }
+  }
+  return Array.from(map.values());
+}
+
 export function mergeTasksByUpdatedAt(localTasks: Task[], remoteTasks: Task[]): Task[] {
   const map = new Map<string, Task>();
-  for (const t of remoteTasks) {
-    map.set(t.id, t);
-  }
+  for (const t of remoteTasks) map.set(t.id, t);
   for (const t of localTasks) {
     const existing = map.get(t.id);
     if (!existing) {
@@ -181,9 +179,7 @@ export function mergeTasksByUpdatedAt(localTasks: Task[], remoteTasks: Task[]): 
     } else {
       const localTime = new Date(t.updatedAt || t.createdAt).getTime();
       const remoteTime = new Date(existing.updatedAt || existing.createdAt).getTime();
-      if (localTime > remoteTime) {
-        map.set(t.id, t);
-      }
+      if (localTime > remoteTime) map.set(t.id, t);
     }
   }
   return Array.from(map.values());
@@ -220,13 +216,7 @@ function mergeTaskThreeWay(
     if (!remoteTask) return { mergedTask: localTask };
     if (areEqual(localTask, remoteTask)) return { mergedTask: localTask };
     return {
-      conflict: {
-        taskId,
-        fields: listTaskKeys(undefined, localTask, remoteTask),
-        localTask,
-        remoteTask,
-        reason: "new-task-conflict",
-      },
+      conflict: { taskId, fields: listTaskKeys(undefined, localTask, remoteTask), localTask, remoteTask, reason: "new-task-conflict" },
     };
   }
 
@@ -239,14 +229,7 @@ function mergeTaskThreeWay(
 
   if (!localTask || !remoteTask) {
     return {
-      conflict: {
-        taskId,
-        fields: listTaskKeys(baseTask, localTask, remoteTask),
-        baseTask,
-        localTask,
-        remoteTask,
-        reason: "delete-conflict",
-      },
+      conflict: { taskId, fields: listTaskKeys(baseTask, localTask, remoteTask), baseTask, localTask, remoteTask, reason: "delete-conflict" },
     };
   }
 
@@ -260,201 +243,56 @@ function mergeTaskThreeWay(
     const baseValue = (baseTask as unknown as Record<string, unknown>)[key];
     const localValue = (localTask as unknown as Record<string, unknown>)[key];
     const remoteValue = (remoteTask as unknown as Record<string, unknown>)[key];
-
     const localFieldChanged = !areEqual(localValue, baseValue);
     const remoteFieldChanged = !areEqual(remoteValue, baseValue);
 
-    if (localFieldChanged && !remoteFieldChanged) {
-      merged[key] = localValue;
-      continue;
-    }
-    if (!localFieldChanged && remoteFieldChanged) {
-      merged[key] = remoteValue;
-      continue;
-    }
-    if (!localFieldChanged && !remoteFieldChanged) {
-      merged[key] = baseValue;
-      continue;
-    }
-
-    if (areEqual(localValue, remoteValue)) {
-      merged[key] = localValue;
-    } else {
-      conflictingFields.push(key);
-    }
+    if (localFieldChanged && !remoteFieldChanged) { merged[key] = localValue; continue; }
+    if (!localFieldChanged && remoteFieldChanged) { merged[key] = remoteValue; continue; }
+    if (!localFieldChanged && !remoteFieldChanged) { merged[key] = baseValue; continue; }
+    if (areEqual(localValue, remoteValue)) { merged[key] = localValue; } else { conflictingFields.push(key); }
   }
 
   if (conflictingFields.length > 0) {
     return {
-      conflict: {
-        taskId,
-        fields: conflictingFields,
-        baseTask,
-        localTask,
-        remoteTask,
-        reason: "field-conflict",
-      },
+      conflict: { taskId, fields: conflictingFields, baseTask, localTask, remoteTask, reason: "field-conflict" },
     };
   }
 
   return { mergedTask: merged as unknown as Task };
 }
 
-export function mergeTasksThreeWay(
-  baseTasks: Task[],
-  localTasks: Task[],
-  remoteTasks: Task[]
-): MergeTasksResult {
+export function mergeTasksThreeWay(baseTasks: Task[], localTasks: Task[], remoteTasks: Task[]): MergeTasksResult {
   const baseMap = asTaskMap(baseTasks);
   const localMap = asTaskMap(localTasks);
   const remoteMap = asTaskMap(remoteTasks);
-
-  const allIds = new Set<string>([
-    ...baseMap.keys(),
-    ...localMap.keys(),
-    ...remoteMap.keys(),
-  ]);
-
+  const allIds = new Set<string>([...baseMap.keys(), ...localMap.keys(), ...remoteMap.keys()]);
   const mergedMap = new Map<string, Task>();
   const conflicts: TaskConflict[] = [];
 
   for (const id of allIds) {
     const result = mergeTaskThreeWay(baseMap.get(id), localMap.get(id), remoteMap.get(id));
-    if (result.conflict) {
-      conflicts.push(result.conflict);
-      continue;
-    }
+    if (result.conflict) { conflicts.push(result.conflict); continue; }
     if (result.mergedTask) mergedMap.set(id, result.mergedTask);
   }
+  return { mergedTasks: Array.from(mergedMap.values()), conflicts };
+}
+
+/**
+ * Full AppData merge: three-way for tasks, updatedAt-based for projects.
+ */
+export function mergeAppData(
+  base: AppData | null,
+  local: AppData,
+  remote: AppData,
+): MergeAppDataResult {
+  const taskResult = base
+    ? mergeTasksThreeWay(base.tasks, local.tasks, remote.tasks)
+    : { mergedTasks: mergeTasksByUpdatedAt(local.tasks, remote.tasks), conflicts: [] };
+
+  const mergedProjects = mergeProjectsByUpdatedAt(local.projects, remote.projects);
 
   return {
-    mergedTasks: Array.from(mergedMap.values()),
-    conflicts,
+    mergedData: { tasks: taskResult.mergedTasks, projects: mergedProjects },
+    conflicts: taskResult.conflicts,
   };
-}
-
-export async function getOrCreateTasksFileId(accessToken: string): Promise<string> {
-  let folder = await searchFileOrFolder(
-    accessToken,
-    FOLDER_NAME,
-    "application/vnd.google-apps.folder"
-  );
-  let folderId = folder?.id;
-
-  if (!folderId) {
-    folderId = await createFolder(accessToken, FOLDER_NAME);
-  }
-
-  const file = await searchFileOrFolder(
-    accessToken,
-    FILE_NAME,
-    "application/json",
-    folderId
-  );
-
-  if (file?.id) return file.id;
-
-  return createJsonFile(accessToken, FILE_NAME, folderId, JSON.stringify([], null, 2));
-}
-
-export async function downloadTasksFromDrive(
-  accessToken: string,
-  fileId: string
-): Promise<Task[]> {
-  return downloadJsonFile(accessToken, fileId);
-}
-
-export async function uploadTasksToDrive(
-  accessToken: string,
-  fileId: string,
-  tasks: Task[]
-): Promise<void> {
-  await updateJsonFile(accessToken, fileId, JSON.stringify(tasks, null, 2));
-}
-
-/**
- * Saves tasks to Google Drive.
- * 1. Finds or creates the "Niyamit" folder.
- * 2. Finds or creates the "tasks.json" file.
- * 3. Updates the file if it exists, otherwise creates it.
- * @deprecated Use syncTasksWithDrive for two-way sync instead.
- */
-export async function saveTasksToDrive(
-  accessToken: string,
-  tasks: Task[]
-): Promise<void> {
-  // 1. Get or create folder
-  let folder = await searchFileOrFolder(
-    accessToken,
-    FOLDER_NAME,
-    "application/vnd.google-apps.folder"
-  );
-  let folderId = folder?.id;
-
-  if (!folderId) {
-    folderId = await createFolder(accessToken, FOLDER_NAME);
-  }
-
-  // 2. Get or create tasks file
-  const file = await searchFileOrFolder(
-    accessToken,
-    FILE_NAME,
-    "application/json",
-    folderId
-  );
-
-  const jsonContent = JSON.stringify(tasks, null, 2);
-
-  if (file?.id) {
-    // 3a. Update existing file
-    await updateJsonFile(accessToken, file.id, jsonContent);
-  } else {
-    // 3b. Create new file
-    await createJsonFile(accessToken, FILE_NAME, folderId, jsonContent);
-  }
-}
-
-/**
- * Syncs tasks with Google Drive.
- * 1. Finds or creates the "Niyamit" folder.
- * 2. Finds or creates the "tasks.json" file.
- * 3. If file exists, downloads and merges remote tasks with local tasks.
- * 4. Uploads the merged result and returns it.
- */
-export async function syncTasksWithDrive(
-  accessToken: string,
-  localTasks: Task[]
-): Promise<Task[]> {
-  let folder = await searchFileOrFolder(
-    accessToken,
-    FOLDER_NAME,
-    "application/vnd.google-apps.folder"
-  );
-  let folderId = folder?.id;
-
-  if (!folderId) {
-    folderId = await createFolder(accessToken, FOLDER_NAME);
-  }
-
-  const file = await searchFileOrFolder(
-    accessToken,
-    FILE_NAME,
-    "application/json",
-    folderId
-  );
-
-  let mergedTasks = [...localTasks];
-
-  if (file?.id) {
-    const remoteTasks = await downloadJsonFile(accessToken, file.id);
-    mergedTasks = mergeTasksByUpdatedAt(localTasks, remoteTasks);
-    
-    const jsonContent = JSON.stringify(mergedTasks, null, 2);
-    await updateJsonFile(accessToken, file.id, jsonContent);
-  } else {
-    const jsonContent = JSON.stringify(mergedTasks, null, 2);
-    await createJsonFile(accessToken, FILE_NAME, folderId, jsonContent);
-  }
-
-  return mergedTasks;
 }

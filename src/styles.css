@@ -13,7 +13,7 @@ body {
 
 .app-root {
   min-height: 100vh;
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2.5rem 1.5rem 3rem;
   display: flex;
@@ -869,4 +869,287 @@ button {
   width: 1.1rem;
   text-align: center;
   flex-shrink: 0;
+}
+
+.ctx-chevron {
+  margin-left: auto;
+  font-size: 0.7em;
+  color: #9ca3af;
+}
+
+.ctx-submenu {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 0.15rem;
+  padding-top: 0.15rem;
+}
+
+.ctx-submenu button {
+  padding-left: 1.8rem;
+  font-size: 0.82rem;
+}
+
+/* ── Sidebar layout ──────────────────────────────────── */
+
+.app-main.layout-sidebar {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sidebar-create-btn {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.content-area {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .app-main.layout-sidebar {
+    grid-template-columns: 1fr;
+  }
+  .app-sidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* ── Project sidebar section ─────────────────────────── */
+
+.project-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.project-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.project-section-header h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.new-project-row-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0 0.4rem;
+}
+
+.new-project-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.new-project-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.input-error {
+  border-color: #d88 !important;
+}
+
+.project-name-error {
+  font-size: 0.75rem;
+  color: #b07070;
+}
+
+/* ── Project tree ────────────────────────────────────── */
+
+.project-tree {
+  outline: none;
+}
+
+.project-tree:focus-visible {
+  outline: 2px solid rgba(79, 70, 229, 0.3);
+  outline-offset: 2px;
+  border-radius: 0.4rem;
+}
+
+.project-node {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 0.12s ease;
+  user-select: none;
+}
+
+.project-node:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.project-node.selected {
+  background: rgba(79, 70, 229, 0.09);
+  font-weight: 500;
+}
+
+.project-node.focused {
+  outline: 2px solid rgba(79, 70, 229, 0.3);
+  outline-offset: -2px;
+}
+
+.project-node.drop-target {
+  background: rgba(139, 164, 190, 0.18);
+  outline: 2px dashed #8ba4be;
+  outline-offset: -2px;
+}
+
+.project-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #6b7280;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.project-toggle:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.project-toggle-spacer {
+  display: inline-block;
+  width: 1.1rem;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-name-input {
+  flex: 1;
+  font-size: 0.88rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  min-width: 0;
+}
+
+/* ── Project view header ──────────────────────────────── */
+
+.project-view-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.project-view-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+/* ── Project pill in form ─────────────────────────────── */
+
+.project-pill-bar {
+  margin-bottom: 0.5rem;
+}
+
+.project-pill {
+  font-size: 0.75rem;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+/* ── Project tag pill in task list ─────────────────────── */
+
+.project-tag-pill {
+  font-size: 0.7rem;
+  background: #f0edff;
+  border-color: #d8d0f0;
+  color: #5b4fa0;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Project autocomplete ─────────────────────────────── */
+
+.project-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 0.45rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+  z-index: 15;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 0.2rem;
+}
+
+.project-autocomplete-item {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.project-autocomplete-item:hover,
+.project-autocomplete-item.highlighted {
+  background: #eef2ff;
+}
+
+.project-autocomplete-item.create {
+  color: #4338ca;
+  font-style: italic;
+}
+
+/* ── Draggable task cursor ────────────────────────────── */
+
+.task-item[draggable="true"] {
+  cursor: grab;
+}
+
+.task-item[draggable="true"]:active {
+  cursor: grabbing;
 }

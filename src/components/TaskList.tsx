@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import type { Task } from "@domain/taskTypes";
+import type { Project } from "@domain/projectTypes";
 import { groupTasksByDate } from "@domain/taskSort";
 import { formatRecurrenceShort } from "@domain/dateParser";
 
@@ -11,6 +12,7 @@ interface TaskListProps {
   onUncloneTask?(id: string): void;
   selectedTaskId?: string | null;
   highlightedTaskId?: string | null;
+  projects?: Project[];
 }
 
 interface ContextMenuState {
@@ -18,6 +20,14 @@ interface ContextMenuState {
   y: number;
   taskId: string;
   isClone: boolean;
+}
+
+const MAX_PROJECT_NAME_LEN = 18;
+
+function truncateProjectName(name: string): string {
+  if (name.length <= MAX_PROJECT_NAME_LEN) return name;
+  const truncated = name.slice(0, MAX_PROJECT_NAME_LEN).replace(/\s+\S*$/, "");
+  return truncated + "\u2026";
 }
 
 export const TaskList: React.FC<TaskListProps> = ({
@@ -28,9 +38,16 @@ export const TaskList: React.FC<TaskListProps> = ({
   onUncloneTask,
   selectedTaskId,
   highlightedTaskId,
+  projects = [],
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const projectMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of projects) if (!p.deleted) map.set(p.id, p.name);
+    return map;
+  }, [projects]);
 
   const activeTasks = tasks.filter((task) => !task.completed && !task.deleted);
   const groups = groupTasksByDate(activeTasks);
@@ -97,6 +114,11 @@ export const TaskList: React.FC<TaskListProps> = ({
                 <li
                   key={task.id}
                   className={className}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/plain", task.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest(".task-complete-toggle")) return;
                     onSelectTask?.(task.id);
@@ -137,6 +159,11 @@ export const TaskList: React.FC<TaskListProps> = ({
                           {task.title}
                         </span>
                         <span className="task-pills">
+                          {task.projectId && projectMap.has(task.projectId) && (
+                            <span className="pill project-tag-pill" title={projectMap.get(task.projectId)}>
+                              {truncateProjectName(projectMap.get(task.projectId)!)}
+                            </span>
+                          )}
                           {task.recurrence && (
                             <span className="pill recurrence-pill">
                               {formatRecurrenceShort(task.recurrence)}

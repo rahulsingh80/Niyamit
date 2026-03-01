@@ -1,45 +1,75 @@
 import type { Task } from "@domain/taskTypes";
+import type { Project } from "@domain/projectTypes";
 
-const STORAGE_KEY = "niyamit.tasks.v1";
+export interface AppData {
+  tasks: Task[];
+  projects: Project[];
+}
 
-export function loadTasks(): Task[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
+const DATA_KEY = "niyamit.data.v1";
+
+// Legacy keys for one-time migration
+const LEGACY_TASKS_KEY = "niyamit.tasks.v1";
+const LEGACY_PROJECTS_KEY = "niyamit.projects.v1";
+
+function normalizeTasks(tasks: unknown[]): Task[] {
+  return (tasks as Task[]).map((task) => ({
+    ...task,
+    dueDate: task.dueDate ?? null,
+    dueTime: task.dueTime || undefined,
+    recurrence: task.recurrence || undefined,
+    completed: task.completed ?? false,
+  }));
+}
+
+/**
+ * Load tasks and projects from localStorage.
+ * Automatically migrates from the old separate-key format on first call.
+ */
+export function loadAppData(): AppData {
+  if (typeof window === "undefined") return { tasks: [], projects: [] };
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Task[];
-
-    // Basic shape validation to guard against corrupted data.
-    if (!Array.isArray(parsed)) {
-      return [];
+    const raw = window.localStorage.getItem(DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        tasks: Array.isArray(parsed?.tasks) ? normalizeTasks(parsed.tasks) : [],
+        projects: Array.isArray(parsed?.projects) ? parsed.projects as Project[] : [],
+      };
     }
+  } catch { /* fall through to migration */ }
 
-    return parsed.map((task) => ({
-      ...task,
-      dueDate: task.dueDate ?? null,
-      dueTime: task.dueTime || undefined,
-      recurrence: task.recurrence || undefined,
-      completed: task.completed ?? false,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export function saveTasks(tasks: Task[]): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
+  // Migrate from legacy separate keys
+  let tasks: Task[] = [];
+  let projects: Project[] = [];
   try {
-    const raw = JSON.stringify(tasks);
-    // This refers to saving the serialized 'tasks' array to the browser's localStorage using the key defined by STORAGE_KEY.
-    window.localStorage.setItem(STORAGE_KEY, raw);
-  } catch {
-    // In a real app, you might surface an error or log somewhere.
-  }
+    const rawTasks = window.localStorage.getItem(LEGACY_TASKS_KEY);
+    if (rawTasks) {
+      const parsed = JSON.parse(rawTasks);
+      if (Array.isArray(parsed)) tasks = normalizeTasks(parsed);
+    }
+  } catch { /* ignore */ }
+  try {
+    const rawProjects = window.localStorage.getItem(LEGACY_PROJECTS_KEY);
+    if (rawProjects) {
+      const parsed = JSON.parse(rawProjects);
+      if (Array.isArray(parsed)) projects = parsed as Project[];
+    }
+  } catch { /* ignore */ }
+
+  // Persist in new format and clean up old keys
+  const data: AppData = { tasks, projects };
+  saveAppData(data);
+  window.localStorage.removeItem(LEGACY_TASKS_KEY);
+  window.localStorage.removeItem(LEGACY_PROJECTS_KEY);
+
+  return data;
 }
 
+export function saveAppData(data: AppData): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  } catch { /* silently fail */ }
+}
