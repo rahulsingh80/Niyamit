@@ -4,6 +4,12 @@
   box-sizing: border-box;
 }
 
+/* Reserve space for scrollbar so layout doesn't shift when switching between
+   long lists (All Tasks) and short lists (project view). */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
