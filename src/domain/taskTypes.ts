@@ -3,6 +3,11 @@
 
 export type TaskPriority = 1 | 2 | 3 | 4;
 
+/** Reminder: either at a specific date/time or X minutes before task due. */
+export type Reminder =
+  | { type: "at"; date: string; time: string }
+  | { type: "before"; minutes: number };
+
 export interface RecurrenceRule {
   type: "weekdays" | "interval" | "dayOfMonth" | "dayOfYear";
   /** Day-of-week indices (0 = Sun … 6 = Sat). Used when type = 'weekdays'. */
@@ -52,4 +57,10 @@ export interface Task {
   cloneGroupId?: string;
   /** The project this task belongs to (at most one). */
   projectId?: string;
+  /** Optional reminder (at a specific time or X before due). */
+  reminder?: Reminder;
+  /** When the user acknowledged the reminder; once set, reminder is hidden. */
+  reminderAcknowledgedAt?: string;
+  /** Snooze until this time (ISO); reminder shows again when now >= this. */
+  reminderSnoozedUntil?: string;
 }

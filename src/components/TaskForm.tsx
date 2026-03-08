@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, FormEvent } from "react";
-import type { Task, TaskPriority, RecurrenceRule } from "@domain/taskTypes";
+import type { Task, TaskPriority, RecurrenceRule, Reminder } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
 import {
   parseTitleInput,
@@ -7,6 +7,7 @@ import {
   formatRecurrenceHint,
   computeNextOccurrence,
 } from "@domain/dateParser";
+import { REMINDER_BEFORE_PRESETS, getReminderBeforeByMinutes } from "@domain/reminderPresets";
 
 interface TaskFormProps {
   onAdd(task: Task): void;
@@ -32,6 +33,22 @@ function toDateStr(d: Date): string {
     `${String(d.getMonth() + 1).padStart(2, "0")}-` +
     `${String(d.getDate()).padStart(2, "0")}`
   );
+}
+
+/** Reminder autocomplete options (text to insert after !). */
+const REMINDER_AC_OPTIONS = [
+  "tom 12:00", "tomorrow 12:00", "today 17:00", "17:00",
+  "10 min", "30 min", "1 hour", "3 hours", "1 day", "2 days", "3 days", "1 week",
+];
+
+/**
+ * Find reminder trigger at end of title: ! or !partial (for autocomplete).
+ */
+function parseReminderTagAtEnd(title: string): { query: string; span: [number, number] } | null {
+  const m = title.match(/\s+!(\S*)$/);
+  if (!m) return null;
+  const start = m.index!;
+  return { query: m[1], span: [start, start + m[0].length] };
 }
 
 /**
@@ -137,9 +154,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   const [priorityOverridden, setPriorityOverridden] = useState(false);
   const [timeManuallySet, setTimeManuallySet] = useState(false);
 
+  // Reminder state
+  const [reminderType, setReminderType] = useState<"none" | "at" | "before">("none");
+  const [reminderAtDate, setReminderAtDate] = useState("");
+  const [reminderAtTime, setReminderAtTime] = useState("");
+  const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30);
+  const [reminderOverridden, setReminderOverridden] = useState(false);
+
   // Project autocomplete state
   const [showAutoComplete, setShowAutoComplete] = useState(false);
   const [acHighlight, setAcHighlight] = useState(0);
+  // Reminder autocomplete (when typing !)
+  const [showReminderAutoComplete, setShowReminderAutoComplete] = useState(false);
+  const [reminderAcHighlight, setReminderAcHighlight] = useState(0);
   // Tracks a confirmed project selection from autocomplete (handles multi-word names)
   const [confirmedProject, setConfirmedProject] = useState<{ id: string | null; name: string } | null>(null);
 
@@ -158,6 +185,26 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     setScheduleOverridden(true);
     setPriorityOverridden(true);
     setTimeManuallySet(!!editingTask.dueTime);
+    if (editingTask.reminder) {
+      if (editingTask.reminder.type === "at") {
+        setReminderType("at");
+        setReminderAtDate(editingTask.reminder.date);
+        setReminderAtTime(editingTask.reminder.time);
+        setReminderBeforeMinutes(30);
+      } else {
+        setReminderType("before");
+        setReminderBeforeMinutes(editingTask.reminder.minutes);
+        setReminderAtDate("");
+        setReminderAtTime("");
+      }
+      setReminderOverridden(false);
+    } else {
+      setReminderType("none");
+      setReminderAtDate("");
+      setReminderAtTime("");
+      setReminderBeforeMinutes(30);
+      setReminderOverridden(false);
+    }
     if (editingTask.recurrence) {
       setWhenMode("recurring");
       setRecType(editingTask.recurrence.type);
@@ -183,40 +230,38 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     });
   }, [editingTask]);
 
-  // ── Find project tag and parse schedule/priority ────────
-  // Find the project tag anywhere in the title (for highlighting, hint, submit)
-  const tagInTitle = findProjectTagAnywhere(title, confirmedProject);
+  // ── Parse schedule, priority, reminder, project from tail (any order) ────────
+  const rawParsed = parseTitleInput(title);
+  const parsed = rawParsed;
 
-  // Strip the project tag before parsing date/time/priority so all three
-  // can appear at the end of the title in any order.
-  const { cleaned: titleForParsing, toOriginal } = tagInTitle
-    ? stripSpanFromTitle(title, tagInTitle.span)
-    : { cleaned: title, toOriginal: (p: number) => p };
-
-  const rawParsed = parseTitleInput(titleForParsing);
-  const parsed = {
-    ...rawParsed,
-    scheduleSpan: rawParsed.scheduleSpan
-      ? [toOriginal(rawParsed.scheduleSpan[0]), toOriginal(rawParsed.scheduleSpan[1])] as [number, number]
-      : undefined,
-    prioritySpan: rawParsed.prioritySpan
-      ? [toOriginal(rawParsed.prioritySpan[0]), toOriginal(rawParsed.prioritySpan[1])] as [number, number]
-      : undefined,
-  };
+  // Project: use parsed project when at end, else find #tag anywhere (middle of title)
+  const hasProjectMatch = parsed.projectTag != null && parsed.projectSpan != null;
+  const tagInTitle = hasProjectMatch
+    ? { query: parsed.projectTag!, span: parsed.projectSpan! }
+    : findProjectTagAnywhere(title, confirmedProject);
 
   const hasScheduleMatch =
     !scheduleOverridden &&
     (parsed.dueDate !== null || parsed.recurrence != null) &&
     parsed.scheduleSpan != null;
   const hasPriorityMatch = !priorityOverridden && parsed.priority != null;
+  const hasReminderMatch = !reminderOverridden && parsed.reminder != null && parsed.reminderSpan != null;
   const hasAnyHighlight =
     (hasScheduleMatch && parsed.scheduleSpan != null) ||
-    (hasPriorityMatch && parsed.prioritySpan != null);
+    (hasPriorityMatch && parsed.prioritySpan != null) ||
+    (hasReminderMatch && parsed.reminderSpan != null) ||
+    (hasProjectMatch && parsed.projectSpan != null);
   const displayPriority =
     hasPriorityMatch && parsed.priority != null ? parsed.priority : priority;
 
+  // Effective due date/time for reminder validation (task due or parsed)
+  const effectiveDueDate = hasScheduleMatch ? parsed.dueDate : dueDate || null;
+  const effectiveDueTime = timeManuallySet ? dueTime : (hasScheduleMatch ? parsed.dueTime : dueTime);
+  const taskHasDueDate = effectiveDueDate != null && effectiveDueDate !== "";
+
   // ── Project autocomplete (end-anchored for typing) ─────
   const projectTag = parseProjectTagAtEnd(title);
+  const reminderTag = parseReminderTagAtEnd(title);
   const acCandidates = projectTag
     ? projects.filter((p) =>
         p.name.toLowerCase().startsWith(projectTag.query.toLowerCase()),
@@ -228,11 +273,36 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     !projects.some(
       (p) => p.name.toLowerCase() === projectTag.query.toLowerCase(),
     );
+  const reminderAcCandidates = reminderTag
+    ? REMINDER_AC_OPTIONS.filter((opt) =>
+        opt.toLowerCase().startsWith(reminderTag.query.toLowerCase()),
+      )
+    : [];
 
   useEffect(() => {
-    setShowAutoComplete(!!(projectTag && (acCandidates.length > 0 || showCreateOption)));
+    setShowAutoComplete(!!(reminderTag ? false : projectTag && (acCandidates.length > 0 || showCreateOption)));
     setAcHighlight(0);
   }, [title]);
+  useEffect(() => {
+    const showReminderAc =
+      reminderTag &&
+      (reminderTag.query === "" || reminderAcCandidates.length > 0);
+    setShowReminderAutoComplete(!!showReminderAc);
+    setReminderAcHighlight(0);
+  }, [title]);
+
+  // Sync reminder form state from parsed reminder when not overridden
+  useEffect(() => {
+    if (reminderOverridden || !parsed.reminder) return;
+    if (parsed.reminder.type === "at") {
+      setReminderType("at");
+      setReminderAtDate(parsed.reminder.date);
+      setReminderAtTime(parsed.reminder.time);
+    } else {
+      setReminderType("before");
+      setReminderBeforeMinutes(parsed.reminder.minutes);
+    }
+  }, [parsed.reminder, reminderOverridden]);
 
   function selectProject(name: string) {
     if (!projectTag) return;
@@ -246,19 +316,48 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     titleInputRef.current?.focus();
   }
 
+  function selectReminderOption(option: string) {
+    if (!reminderTag) return;
+    const [start] = reminderTag.span;
+    const before = title.substring(0, start);
+    const after = ` !${option} `;
+    setTitle(before + after);
+    setShowReminderAutoComplete(false);
+    setReminderOverridden(false);
+    titleInputRef.current?.focus();
+  }
+
   // ── Handlers ────────────────────────────────────────────
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newTitle = e.target.value;
     setTitle(newTitle);
     setScheduleOverridden(false);
     setPriorityOverridden(false);
+    setReminderOverridden(false);
     setTimeManuallySet(false);
     if (confirmedProject && !newTitle.includes(buildTagStr(confirmedProject.name))) {
       setConfirmedProject(null);
     }
   }
 
+  const reminderAcList = reminderAcCandidates.length > 0 ? reminderAcCandidates : REMINDER_AC_OPTIONS;
   function handleTitleKeyDown(e: React.KeyboardEvent) {
+    if (showReminderAutoComplete) {
+      const total = reminderAcList.length;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setReminderAcHighlight((h) => (h + 1) % total);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setReminderAcHighlight((h) => (h - 1 + total) % total);
+      } else if (e.key === "Enter" && total > 0) {
+        e.preventDefault();
+        selectReminderOption(reminderAcList[reminderAcHighlight]);
+      } else if (e.key === "Escape") {
+        setShowReminderAutoComplete(false);
+      }
+      return;
+    }
     if (!showAutoComplete) return;
     const totalItems = acCandidates.length + (showCreateOption ? 1 : 0);
     if (e.key === "ArrowDown") {
@@ -346,16 +445,46 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 
     const finalPriority = displayPriority;
 
-    // Gather spans to strip from title (schedule, priority, project tag)
+    // Build reminder (validate: at = after now and before task due; before = only if task has due)
+    let finalReminder: Reminder | undefined;
+    if (reminderType === "at" && reminderAtDate && reminderAtTime) {
+      const reminderAt = new Date(`${reminderAtDate}T${reminderAtTime}:00`);
+      const now = new Date();
+      if (reminderAt > now) {
+        if (finalDate && finalTime) {
+          const taskDue = new Date(`${finalDate}T${finalTime}:00`);
+          if (reminderAt < taskDue) finalReminder = { type: "at", date: reminderAtDate, time: reminderAtTime };
+        } else if (finalDate) {
+          const taskDue = new Date(`${finalDate}T05:00:00`);
+          if (reminderAt < taskDue) finalReminder = { type: "at", date: reminderAtDate, time: reminderAtTime };
+        } else {
+          finalReminder = { type: "at", date: reminderAtDate, time: reminderAtTime };
+        }
+      }
+    } else if (reminderType === "before" && finalDate) {
+      finalReminder = { type: "before", minutes: reminderBeforeMinutes };
+    }
+
+    // Gather spans to strip from title (schedule, priority, reminder, project tag)
     const spansToRemove: [number, number][] = [];
     if (hasScheduleMatch && parsed.scheduleSpan)
       spansToRemove.push(parsed.scheduleSpan);
     if (hasPriorityMatch && parsed.prioritySpan)
       spansToRemove.push(parsed.prioritySpan);
+    if (hasReminderMatch && parsed.reminderSpan)
+      spansToRemove.push(parsed.reminderSpan);
+    if (hasProjectMatch && parsed.projectSpan)
+      spansToRemove.push(parsed.projectSpan);
 
-    // Resolve project from #tag in title (uses the already-computed tagInTitle)
+    // Resolve project from #tag in title (parsed from end or found anywhere)
     let resolvedProjectId: string | undefined;
-    if (tagInTitle && tagInTitle.query.length > 0) {
+    if (hasProjectMatch) {
+      const name = parsed.projectTag!;
+      const match = projects.find(
+        (p) => p.name.toLowerCase() === name.toLowerCase(),
+      );
+      resolvedProjectId = match ? match.id : `new:${name}`;
+    } else if (tagInTitle && tagInTitle.query.length > 0) {
       let tagStart = tagInTitle.span[0];
       let tagEnd = tagInTitle.span[1];
       if (tagEnd < title.length && title[tagEnd] === " ") tagEnd++;
@@ -396,6 +525,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       defaultProjectId ||
       undefined;
 
+    const reminderPayload = finalReminder
+      ? { reminder: finalReminder, reminderAcknowledgedAt: undefined, reminderSnoozedUntil: undefined }
+      : { reminder: undefined, reminderAcknowledgedAt: undefined, reminderSnoozedUntil: undefined };
+
     if (isEditMode && editingTask && onUpdate) {
       onUpdate({
         ...editingTask,
@@ -407,6 +540,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         priority: finalPriority,
         projectId,
         updatedAt: nowIso,
+        ...reminderPayload,
       });
     } else {
       onAdd({
@@ -423,6 +557,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         createdAt: nowIso,
         updatedAt: nowIso,
         completed: false,
+        ...(finalReminder ? reminderPayload : {}),
       });
     }
     resetForm();
@@ -459,7 +594,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     setScheduleOverridden(false);
     setPriorityOverridden(false);
     setTimeManuallySet(false);
+    setReminderType("none");
+    setReminderAtDate("");
+    setReminderAtTime("");
+    setReminderBeforeMinutes(30);
+    setReminderOverridden(false);
     setShowAutoComplete(false);
+    setShowReminderAutoComplete(false);
     setConfirmedProject(null);
   }
 
@@ -471,7 +612,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     const spans: [number, number][] = [];
     if (hasScheduleMatch && parsed.scheduleSpan) spans.push(parsed.scheduleSpan);
     if (hasPriorityMatch && parsed.prioritySpan) spans.push(parsed.prioritySpan);
-    if (projectHighlightSpan) spans.push(projectHighlightSpan);
+    if (hasReminderMatch && parsed.reminderSpan) spans.push(parsed.reminderSpan);
+    if (hasProjectMatch && parsed.projectSpan) spans.push(parsed.projectSpan);
+    else if (projectHighlightSpan) spans.push(projectHighlightSpan);
     if (spans.length === 0) return null;
     spans.sort((a, b) => a[0] - b[0]);
     const parts: React.ReactNode[] = [];
@@ -503,6 +646,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   }
   if (hasPriorityMatch && parsed.priority != null)
     hintParts.push(`P${parsed.priority}`);
+  if (hasReminderMatch || reminderType !== "none") {
+    if (reminderType === "at" && reminderAtDate && reminderAtTime)
+      hintParts.push(`Reminder: ${formatDateHint(reminderAtDate, reminderAtTime)}`);
+    else if (reminderType === "before")
+      hintParts.push(`Reminder: ${getReminderBeforeByMinutes(reminderBeforeMinutes)?.label ?? `${reminderBeforeMinutes} min before`}`);
+  }
   if (tagInTitle && tagInTitle.query.length > 0) {
     if (confirmedProject) {
       hintParts.push(confirmedProject.id ? `#${confirmedProject.name}` : `#${confirmedProject.name} (new)`);
@@ -555,6 +704,37 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 >
                   Create &ldquo;{projectTag.query}&rdquo;
                 </div>
+              )}
+            </div>
+          )}
+          {showReminderAutoComplete && (
+            <div className="project-autocomplete reminder-autocomplete">
+              {reminderAcCandidates.length > 0 ? (
+                reminderAcCandidates.map((opt, i) => (
+                  <div
+                    key={opt}
+                    className={`project-autocomplete-item${i === reminderAcHighlight ? " highlighted" : ""}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectReminderOption(opt);
+                    }}
+                  >
+                    !{opt}
+                  </div>
+                ))
+              ) : (
+                REMINDER_AC_OPTIONS.map((opt, i) => (
+                  <div
+                    key={opt}
+                    className={`project-autocomplete-item${i === reminderAcHighlight ? " highlighted" : ""}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectReminderOption(opt);
+                    }}
+                  >
+                    !{opt}
+                  </div>
+                ))
               )}
             </div>
           )}
@@ -655,6 +835,50 @@ export const TaskForm: React.FC<TaskFormProps> = ({
           <label htmlFor="dueTime">Time</label>
           <input id="dueTime" type="time" value={dueTime} onChange={handleTimeChange} />
         </div>
+      </fieldset>
+
+      <fieldset className="when-section reminder-section">
+        <legend>Reminder</legend>
+        <div className="when-mode-toggle">
+          <label className={reminderType === "none" ? "active" : ""}>
+            <input type="radio" name="reminderType" value="none" checked={reminderType === "none"} onChange={() => { setReminderType("none"); setReminderOverridden(true); }} />
+            None
+          </label>
+          <label className={reminderType === "at" ? "active" : ""}>
+            <input type="radio" name="reminderType" value="at" checked={reminderType === "at"} onChange={() => { setReminderType("at"); setReminderOverridden(true); }} />
+            At date & time
+          </label>
+          <label className={reminderType === "before" ? "active" : ""}>
+            <input type="radio" name="reminderType" value="before" checked={reminderType === "before"} onChange={() => { setReminderType("before"); setReminderOverridden(true); }} />
+            Before due
+          </label>
+        </div>
+        {reminderType === "at" && (
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="reminderAtDate">Date</label>
+              <input id="reminderAtDate" type="date" value={reminderAtDate} onChange={(e) => { setReminderAtDate(e.target.value); setReminderOverridden(true); }} />
+            </div>
+            <div className="field">
+              <label htmlFor="reminderAtTime">Time</label>
+              <input id="reminderAtTime" type="time" value={reminderAtTime} onChange={(e) => { setReminderAtTime(e.target.value); setReminderOverridden(true); }} />
+            </div>
+          </div>
+        )}
+        {reminderType === "before" && (
+          taskHasDueDate ? (
+            <div className="field">
+              <label htmlFor="reminderBefore">When</label>
+              <select id="reminderBefore" value={reminderBeforeMinutes} onChange={(e) => { setReminderBeforeMinutes(Number(e.target.value)); setReminderOverridden(true); }}>
+                {REMINDER_BEFORE_PRESETS.map((p) => (
+                  <option key={p.minutes} value={p.minutes}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="reminder-before-hint">Set a due date above to choose when to be reminded.</p>
+          )
+        )}
       </fieldset>
 
       <div className="field-row">

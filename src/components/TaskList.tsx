@@ -159,6 +159,15 @@ export const TaskList: React.FC<TaskListProps> = ({
                           {task.title}
                         </span>
                         <span className="task-pills">
+                          {task.reminder && (
+                            <span
+                              className="reminder-icon-pill"
+                              title="Has reminder"
+                              aria-label="Has reminder"
+                            >
+                              🕐
+                            </span>
+                          )}
                           {task.projectId && projectMap.has(task.projectId) && (
                             <span className="pill project-tag-pill" title={projectMap.get(task.projectId)}>
                               {truncateProjectName(projectMap.get(task.projectId)!)}

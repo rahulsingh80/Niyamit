@@ -12,8 +12,10 @@ import {
   mergeAppData,
   uploadAppDataToDrive,
 } from "@services/googleDriveService";
+import { getDueReminders } from "@domain/reminderUtils";
 import { ProjectSidebar } from "@components/ProjectSidebar";
 import { TaskList } from "@components/TaskList";
+import { RemindersSection } from "@components/RemindersSection";
 import "./styles.css";
 
 const TOKEN_KEY = "niyamit_google_token";
@@ -319,6 +321,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           dueDate: advanceRecurrence(ct.recurrence, ct.dueDate),
           dueTime: ct.dueTime, recurrence: ct.recurrence, priority: ct.priority,
           projectId: ct.projectId,
+          reminder: ct.reminder,
           createdAt: nowIso, updatedAt: nowIso, completed: false,
         });
       }
@@ -510,6 +513,20 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     return tasks.filter((t) => t.projectId && ids.has(t.projectId));
   }, [tasks, projects, selectedProjectId]);
 
+  const dueReminders = useMemo(() => getDueReminders(tasks), [tasks]);
+
+  function handleAcknowledgeReminder(taskId: string) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    applyLocalChange(tasks.map((t) => t.id === taskId ? { ...t, reminderAcknowledgedAt: nowIso, updatedAt: nowIso } : t));
+  }
+
+  function handleSnoozeReminder(taskId: string, snoozedUntilIso: string) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    applyLocalChange(tasks.map((t) => t.id === taskId ? { ...t, reminderSnoozedUntil: snoozedUntilIso, updatedAt: nowIso } : t));
+  }
+
   const selectedProject = selectedProjectId
     ? projects.find((p) => p.id === selectedProjectId && !p.deleted) ?? null
     : null;
@@ -576,7 +593,14 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
         </div>
       )}
 
-      <main className="app-main layout-sidebar">
+      <main className={`app-main layout-sidebar${isFormOpen ? " form-open" : ""}`}>
+        {dueReminders.length > 0 && (
+          <RemindersSection
+            reminders={dueReminders}
+            onAcknowledge={handleAcknowledgeReminder}
+            onSnooze={handleSnoozeReminder}
+          />
+        )}
         <ProjectSidebar
           projects={projects}
           allProjects={projects}

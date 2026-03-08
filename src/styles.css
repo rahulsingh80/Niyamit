@@ -291,6 +291,88 @@ body {
   color: #9ca3af;
 }
 
+/* ── Reminders section ───────────────────────────────── */
+.reminders-section {
+  margin-bottom: 0;
+}
+.app-main.layout-sidebar .reminders-section {
+  grid-column: 1 / -1;
+}
+.reminders-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.reminders-section-title {
+  font-weight: 600;
+}
+.reminders-section-count {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.reminders-section-chevron {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+.reminders-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.reminder-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+.reminder-item:last-child {
+  border-bottom: none;
+}
+.reminder-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.reminder-task-title {
+  font-weight: 500;
+}
+.reminder-task-due,
+.reminder-due {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.reminder-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.reminder-snooze-select {
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+.reminder-ack-btn {
+  font-size: 0.9rem;
+  padding: 0.35rem 0.65rem;
+}
+
 /* ── Title input highlight ────────────────────────────── */
 
 .title-input-wrapper {
@@ -346,10 +428,23 @@ body {
 .field-row {
   display: flex;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .field-row .field {
   flex: 1;
+  min-width: 0;
+}
+
+.field-row input,
+.field-row select {
+  min-width: 0;
+}
+
+.reminder-before-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #6b7280;
 }
 
 label {
@@ -536,6 +631,19 @@ button {
   gap: 0.35rem;
   align-items: center;
   flex-shrink: 0;
+}
+
+.reminder-icon-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.15rem;
+  border-radius: 0.35rem;
+  background: #f5f3ff;
+  border: 1px solid #e0daf0;
+  color: #6b5fa0;
 }
 
 .time-pill {
@@ -905,6 +1013,10 @@ button {
   align-items: start;
 }
 
+.app-main.layout-sidebar.form-open {
+  grid-template-columns: minmax(360px, 380px) 1fr;
+}
+
 .app-sidebar {
   position: sticky;
   top: 1.5rem;
@@ -913,6 +1025,11 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0;
+  min-width: 0;
+}
+
+.form-panel {
+  min-width: 0;
 }
 
 .sidebar-create-btn {

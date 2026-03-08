@@ -19,6 +19,9 @@ function normalizeTasks(tasks: unknown[]): Task[] {
     dueTime: task.dueTime || undefined,
     recurrence: task.recurrence || undefined,
     completed: task.completed ?? false,
+    reminder: task.reminder || undefined,
+    reminderAcknowledgedAt: task.reminderAcknowledgedAt || undefined,
+    reminderSnoozedUntil: task.reminderSnoozedUntil || undefined,
   }));
 }
 

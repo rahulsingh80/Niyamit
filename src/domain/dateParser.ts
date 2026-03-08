@@ -1,4 +1,4 @@
-import type { TaskPriority, RecurrenceRule } from "./taskTypes";
+import type { TaskPriority, RecurrenceRule, Reminder } from "./taskTypes";
 
 // ── Public types ────────────────────────────────────────
 
@@ -8,10 +8,18 @@ export interface ParsedInput {
   dueTime?: string;
   recurrence?: RecurrenceRule;
   priority?: TaskPriority;
+  /** Parsed reminder from trailing !... in title */
+  reminder?: Reminder;
   /** Span [start, end) of schedule text (date or recurrence) in the raw input */
   scheduleSpan?: [number, number];
   /** Span [start, end) of !!N priority text in the raw input */
   prioritySpan?: [number, number];
+  /** Span [start, end) of !... reminder text in the raw input */
+  reminderSpan?: [number, number];
+  /** Project tag parsed from end (e.g. "work" or "my project"); only set when #tag at end */
+  projectTag?: string;
+  /** Span [start, end) of #tag in the raw input when at end */
+  projectSpan?: [number, number];
 }
 
 // ── Constants ───────────────────────────────────────────
@@ -322,6 +330,141 @@ interface PriorityMatch {
   priority: TaskPriority;
 }
 
+interface ReminderMatch {
+  prefix: string;
+  reminder: Reminder;
+  span: [number, number];
+}
+
+interface ProjectMatch {
+  prefix: string;
+  projectTag: string;
+  span: [number, number];
+}
+
+// ── Project tag at end (#word or #"quoted") ─────────────
+
+function tryMatchProjectAtEnd(input: string, inputStart: number): ProjectMatch | null {
+  const quoted = input.match(/\s+#"([^"]*)"?\s*$/);
+  if (quoted) {
+    const start = (quoted.index ?? 0) + inputStart;
+    return {
+      prefix: input.substring(0, quoted.index).trimEnd(),
+      projectTag: quoted[1],
+      span: [start, start + quoted[0].length],
+    };
+  }
+  const plain = input.match(/\s+#(\S+)\s*$/);
+  if (!plain) return null;
+  const start = (plain.index ?? 0) + inputStart;
+  return {
+    prefix: input.substring(0, plain.index).trimEnd(),
+    projectTag: plain[1],
+    span: [start, start + plain[0].length],
+  };
+}
+
+// ── Reminder matcher (trailing !... ) ───────────────────
+
+/** "Before due" minute values for parsing. */
+const BEFORE_MINUTES: Record<string, number> = {
+  "10 min": 10, "10 mins": 10, "30 min": 30, "30 mins": 30,
+  "1 hour": 60, "1 hours": 60, "3 hours": 180, "3 hour": 180,
+  "1 day": 1440, "2 days": 2880, "2 day": 2880, "3 days": 4320, "3 day": 4320,
+  "1 week": 10080, "1 weeks": 10080,
+};
+
+function tryMatchReminder(input: string, inputStart: number): ReminderMatch | null {
+  // Require ! not followed by ! (so we match " !30 min" but not " !!2"); body stops before \s*!! or \s*# or end
+  const m = input.match(/\s+!(?!!)(.+?)\s*(?=\s*!!|\s*#|$)/);
+  if (!m) return null;
+  const prefix = input.substring(0, m.index).trimEnd();
+  const body = m[1].trim();
+  const spanStart = (m.index ?? 0) + inputStart;
+  const spanEnd = spanStart + m[0].length;
+
+  // ─ "Before due": N min(s) / hour(s) / day(s) / week(s) ─
+  const beforeKey = body.toLowerCase();
+  if (beforeKey in BEFORE_MINUTES) {
+    return { prefix, reminder: { type: "before", minutes: BEFORE_MINUTES[beforeKey] }, span: [spanStart, spanEnd] };
+  }
+  const beforeM = body.match(re(`^(\\d+)\\s+(min(?:ute)?s?|hours?|days?|weeks?)\\s*$`));
+  if (beforeM) {
+    const n = parseInt(beforeM[1], 10);
+    const unit = beforeM[2].toLowerCase().replace(/s$/, "");
+    let minutes = 0;
+    if (unit.startsWith("min")) minutes = n;
+    else if (unit.startsWith("hour")) minutes = n * 60;
+    else if (unit.startsWith("day")) minutes = n * 1440;
+    else if (unit.startsWith("week")) minutes = n * 10080;
+    if (minutes > 0)
+      return { prefix, reminder: { type: "before", minutes }, span: [spanStart, spanEnd] };
+  }
+
+  // ─ "At" specific date/time ─
+  // today/tomorrow/tom [time]
+  const todTom = body.match(re(`^(today|tomorrow|tod|tom)(?:\\s+(?:at\\s+)?(\\d{1,2}:\\d{2}))?\\s*$`));
+  if (todTom) {
+    const offset = /tom/.test(todTom[1].toLowerCase()) ? 1 : 0;
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    const time = todTom[2] ? parseTime(todTom[2]) : undefined;
+    if (!time && todTom[2]) return null;
+    return {
+      prefix,
+      reminder: { type: "at", date: toDateStr(d), time: time ?? "09:00" },
+      span: [spanStart, spanEnd],
+    };
+  }
+  // time only -> today
+  const timeOnly = body.match(/^(\d{1,2}:\d{2})\s*$/);
+  if (timeOnly) {
+    const time = parseTime(timeOnly[1]);
+    if (time) {
+      const now = new Date();
+      return {
+        prefix,
+        reminder: { type: "at", date: toDateStr(now), time },
+        span: [spanStart, spanEnd],
+      };
+    }
+  }
+  // DD Month [YYYY] [time] or Month DD [YYYY] [time]
+  const dateTime = body.match(
+    re(`^(\\d{1,2})\\s+(${MONTH_RE})(?:\\s+(\\d{4}))?(?:\\s+(?:at\\s+)?(\\d{1,2}:\\d{2}))?\\s*$`),
+  );
+  if (dateTime) {
+    const day = parseInt(dateTime[1], 10);
+    const mi = MONTH_MAP[dateTime[2].toLowerCase().substring(0, 3)];
+    if (mi != null && day >= 1 && day <= 31) {
+      const year = dateTime[3] ? parseInt(dateTime[3], 10) : undefined;
+      const time = dateTime[4] ? parseTime(dateTime[4]) : undefined;
+      return {
+        prefix,
+        reminder: { type: "at", date: toDateStr(nextMonthDay(mi, day, year)), time: time ?? "09:00" },
+        span: [spanStart, spanEnd],
+      };
+    }
+  }
+  const dateTime2 = body.match(
+    re(`^(${MONTH_RE})\\s+(\\d{1,2})(?:\\s+(\\d{4}))?(?:\\s+(?:at\\s+)?(\\d{1,2}:\\d{2}))?\\s*$`),
+  );
+  if (dateTime2) {
+    const mi = MONTH_MAP[dateTime2[1].toLowerCase().substring(0, 3)];
+    const day = parseInt(dateTime2[2], 10);
+    if (mi != null && day >= 1 && day <= 31) {
+      const year = dateTime2[3] ? parseInt(dateTime2[3], 10) : undefined;
+      const time = dateTime2[4] ? parseTime(dateTime2[4]) : undefined;
+      return {
+        prefix,
+        reminder: { type: "at", date: toDateStr(nextMonthDay(mi, day, year)), time: time ?? "09:00" },
+        span: [spanStart, spanEnd],
+      };
+    }
+  }
+  return null;
+}
+
 // ── Priority matcher ────────────────────────────────────
 
 function tryMatchPriority(input: string): PriorityMatch | null {
@@ -575,58 +718,121 @@ function tryMatchSchedule(input: string): ScheduleMatch | null {
 
 // ── Main parser ─────────────────────────────────────────
 
+type TailMatch =
+  | { kind: "reminder"; prefix: string; span: [number, number]; reminder: Reminder }
+  | { kind: "priority"; prefix: string; span: [number, number]; priority: TaskPriority }
+  | { kind: "schedule"; prefix: string; span: [number, number]; schedule: ScheduleMatch }
+  | { kind: "project"; prefix: string; span: [number, number]; projectTag: string };
+
+function pickRightmostTailMatch(
+  input: string,
+  firstNonWs: number,
+): TailMatch | null {
+  const len = input.length;
+  let best: TailMatch | null = null;
+  let bestStart = -1;
+
+  const reminderMatch = tryMatchReminder(input, firstNonWs);
+  if (reminderMatch && reminderMatch.span[0] > bestStart) {
+    bestStart = reminderMatch.span[0];
+    best = {
+      kind: "reminder",
+      prefix: reminderMatch.prefix,
+      span: reminderMatch.span,
+      reminder: reminderMatch.reminder,
+    };
+  }
+
+  const priorityMatch = tryMatchPriority(input);
+  if (priorityMatch) {
+    const start = firstNonWs + priorityMatch.prefix.length;
+    if (start > bestStart) {
+      bestStart = start;
+      best = {
+        kind: "priority",
+        prefix: priorityMatch.prefix,
+        span: [start, firstNonWs + len],
+        priority: priorityMatch.priority,
+      };
+    }
+  }
+
+  const scheduleMatch = tryMatchSchedule(input);
+  if (scheduleMatch) {
+    const prefix = scheduleMatch.kind === "date" ? scheduleMatch.match.prefix : scheduleMatch.match.prefix;
+    const start = firstNonWs + prefix.length;
+    if (start > bestStart) {
+      bestStart = start;
+      best = {
+        kind: "schedule",
+        prefix,
+        span: [start, firstNonWs + len],
+        schedule: scheduleMatch,
+      };
+    }
+  }
+
+  const projectMatch = tryMatchProjectAtEnd(input, firstNonWs);
+  if (projectMatch && projectMatch.span[0] > bestStart) {
+    bestStart = projectMatch.span[0];
+    best = {
+      kind: "project",
+      prefix: projectMatch.prefix,
+      span: projectMatch.span,
+      projectTag: projectMatch.projectTag,
+    };
+  }
+
+  return best;
+}
+
 /**
- * Parses schedule (date/time OR recurrence), and priority from the tail
- * of a task title. Both can appear at the end in either order.
+ * Parses schedule, priority, reminder, and project tag from the tail of a task title.
+ * They may appear at the end in any order; each match is stripped from the right and
+ * parsing repeats until no more tail patterns match.
  */
 export function parseTitleInput(rawTitle: string): ParsedInput {
   const firstNonWs = rawTitle.search(/\S/);
   if (firstNonWs === -1) return { title: "", dueDate: null };
-  const input = rawTitle.trim();
+  let input = rawTitle.trim();
 
   let scheduleResult: ScheduleMatch | null = null;
-  let priorityMatch: PriorityMatch | null = null;
   let scheduleSpan: [number, number] | undefined;
+  let priorityMatch: PriorityMatch | null = null;
   let prioritySpan: [number, number] | undefined;
-  let titlePrefix = input;
+  let reminder: Reminder | undefined;
+  let reminderSpan: [number, number] | undefined;
+  let projectTag: string | undefined;
+  let projectSpan: [number, number] | undefined;
 
-  // Strategy 1: priority at the very end, then schedule on the remainder
-  const p1 = tryMatchPriority(input);
-  if (p1) {
-    priorityMatch = p1;
-    prioritySpan = [firstNonWs + p1.prefix.length, firstNonWs + input.length];
-    titlePrefix = p1.prefix;
+  while (input.length > 0) {
+    const match = pickRightmostTailMatch(input, firstNonWs);
+    if (!match) break;
 
-    const s1 = tryMatchSchedule(p1.prefix);
-    if (s1) {
-      scheduleResult = s1;
-      const schPrefix = s1.kind === "date" ? s1.match.prefix : s1.match.prefix;
-      scheduleSpan = [firstNonWs + schPrefix.length, firstNonWs + p1.prefix.length];
-      titlePrefix = schPrefix;
+    switch (match.kind) {
+      case "reminder":
+        reminder = match.reminder;
+        reminderSpan = match.span;
+        input = match.prefix;
+        break;
+      case "priority":
+        priorityMatch = { prefix: match.prefix, priority: match.priority };
+        prioritySpan = match.span;
+        input = match.prefix;
+        break;
+      case "schedule":
+        scheduleResult = match.schedule;
+        scheduleSpan = match.span;
+        input = match.prefix;
+        break;
+      case "project":
+        projectTag = match.projectTag;
+        projectSpan = match.span;
+        input = match.prefix;
+        break;
     }
   }
 
-  // Strategy 2: schedule at the very end (only if none found yet)
-  if (!scheduleResult) {
-    const s2 = tryMatchSchedule(input);
-    if (s2) {
-      scheduleResult = s2;
-      const schPrefix = s2.kind === "date" ? s2.match.prefix : s2.match.prefix;
-      scheduleSpan = [firstNonWs + schPrefix.length, firstNonWs + input.length];
-
-      if (!priorityMatch) {
-        titlePrefix = schPrefix;
-        const p2 = tryMatchPriority(schPrefix);
-        if (p2) {
-          priorityMatch = p2;
-          prioritySpan = [firstNonWs + p2.prefix.length, firstNonWs + schPrefix.length];
-          titlePrefix = p2.prefix;
-        }
-      }
-    }
-  }
-
-  // Build result
   let dueDate: string | null = null;
   let dueTime: string | undefined;
   let recurrence: RecurrenceRule | undefined;
@@ -643,12 +849,16 @@ export function parseTitleInput(rawTitle: string): ParsedInput {
   }
 
   return {
-    title: cleanTitle(titlePrefix),
+    title: cleanTitle(input),
     dueDate,
     dueTime,
     recurrence,
     priority: priorityMatch?.priority,
+    reminder,
+    projectTag,
     scheduleSpan,
     prioritySpan,
+    reminderSpan,
+    projectSpan,
   };
 }
