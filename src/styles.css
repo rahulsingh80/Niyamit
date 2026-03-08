@@ -545,6 +545,18 @@ button {
   margin-top: 0.5rem;
 }
 
+.date-group-droppable {
+  min-height: 2rem;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease;
+}
+
+.date-group-droppable.date-group-drag-over {
+  background-color: #e8f0e8;
+  outline: 2px dashed #6b8e6b;
+  outline-offset: 2px;
+}
+
 .task-count {
   font-size: 0.72rem;
   font-weight: 500;

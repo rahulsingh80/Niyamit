@@ -653,6 +653,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
             onCloneTask={handleCloneTask}
             onUncloneTask={handleUncloneTask}
             onDeleteTask={handleDeleteTask}
+            onUpdateTask={handleUpdateTask}
             onSelectProject={setSelectedProjectId}
             selectedTaskId={editingTask?.id}
             highlightedTaskId={highlightedTaskId}

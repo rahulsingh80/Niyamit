@@ -11,6 +11,7 @@ interface TaskListProps {
   onCloneTask?(id: string): void;
   onUncloneTask?(id: string): void;
   onDeleteTask?(id: string): void;
+  onUpdateTask?(task: Task): void;
   onSelectProject?(projectId: string): void;
   selectedTaskId?: string | null;
   highlightedTaskId?: string | null;
@@ -33,6 +34,32 @@ function truncateProjectName(name: string): string {
   return truncated + "\u2026";
 }
 
+function toLocalDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Returns target date YYYY-MM-DD if the group is a valid drop target for moving a task's due date; null otherwise. */
+function getTargetDateFromGroupKey(
+  key: string,
+  todayStr: string,
+  tomorrowStr: string,
+): string | null {
+  if (key === "overdue" || key === "later" || key === "no-date") return null;
+  if (key === "today") return todayStr;
+  if (key === "tomorrow") return tomorrowStr;
+  if (key.startsWith("later-")) return key.slice(6);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
+  return null;
+}
+
+function isDroppableGroup(
+  group: { key: string; isSectionHeading?: boolean },
+  todayStr: string,
+  tomorrowStr: string,
+): boolean {
+  return getTargetDateFromGroupKey(group.key, todayStr, tomorrowStr) !== null;
+}
+
 export const TaskList: React.FC<TaskListProps> = ({
   tasks,
   onCompleteTask,
@@ -40,12 +67,14 @@ export const TaskList: React.FC<TaskListProps> = ({
   onCloneTask,
   onUncloneTask,
   onDeleteTask,
+  onUpdateTask,
   onSelectProject,
   selectedTaskId,
   highlightedTaskId,
   projects = [],
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [dragOverGroupKey, setDragOverGroupKey] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const projectMap = useMemo(() => {
@@ -56,6 +85,46 @@ export const TaskList: React.FC<TaskListProps> = ({
 
   const activeTasks = tasks.filter((task) => !task.completed && !task.deleted);
   const groups = groupTasksByDate(activeTasks);
+
+  const now = new Date();
+  const todayStr = toLocalDateString(now);
+  const tomorrowStr = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+
+  function handleSectionDragOver(e: React.DragEvent, group: { key: string; isSectionHeading?: boolean }) {
+    if (!onUpdateTask || !isDroppableGroup(group, todayStr, tomorrowStr)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverGroupKey(group.key);
+  }
+
+  function handleSectionDragLeave(e: React.DragEvent, groupKey: string) {
+    if (dragOverGroupKey === groupKey) setDragOverGroupKey(null);
+  }
+
+  function handleSectionDrop(e: React.DragEvent, group: { key: string; isSectionHeading?: boolean }) {
+    e.preventDefault();
+    setDragOverGroupKey(null);
+    if (!onUpdateTask) return;
+    const targetDate = getTargetDateFromGroupKey(group.key, todayStr, tomorrowStr);
+    if (targetDate == null) return;
+    const taskId = e.dataTransfer.getData("text/plain");
+    const task = activeTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    let dueTime: string | undefined = task.dueTime;
+    if (targetDate === todayStr && task.dueTime) {
+      const [h, m] = task.dueTime.split(":").map(Number);
+      const taskTimeToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m ?? 0);
+      if (taskTimeToday < now) dueTime = undefined;
+    }
+
+    onUpdateTask({
+      ...task,
+      dueDate: targetDate,
+      dueTime,
+      updatedAt: new Date().toISOString(),
+    });
+  }
 
   useEffect(() => {
     if (!ctxMenu) return;
@@ -74,6 +143,18 @@ export const TaskList: React.FC<TaskListProps> = ({
       document.removeEventListener("scroll", handleScroll, true);
     };
   }, [ctxMenu]);
+
+  useEffect(() => {
+    function clearDragOver() {
+      setDragOverGroupKey(null);
+    }
+    document.addEventListener("dragend", clearDragOver);
+    document.addEventListener("drop", clearDragOver);
+    return () => {
+      document.removeEventListener("dragend", clearDragOver);
+      document.removeEventListener("drop", clearDragOver);
+    };
+  }, []);
 
   function handleContextMenu(e: React.MouseEvent, task: Task) {
     e.preventDefault();
@@ -96,10 +177,16 @@ export const TaskList: React.FC<TaskListProps> = ({
 
   return (
     <div className="task-list-container">
-      {groups.map((group) => (
+      {groups.map((group) => {
+        const droppable = isDroppableGroup(group, todayStr, tomorrowStr);
+        const isDragOver = dragOverGroupKey === group.key;
+        return (
         <section
           key={group.key}
-          className={`date-group${group.isOverdue ? " overdue-group" : ""}`}
+          className={`date-group${group.isOverdue ? " overdue-group" : ""}${droppable ? " date-group-droppable" : ""}${isDragOver ? " date-group-drag-over" : ""}`}
+          onDragOver={droppable ? (e) => handleSectionDragOver(e, group) : undefined}
+          onDragLeave={droppable ? (e) => handleSectionDragLeave(e, group.key) : undefined}
+          onDrop={droppable ? (e) => handleSectionDrop(e, group) : undefined}
         >
           <div className={`date-group-heading${group.isSectionHeading ? " section-heading-only" : ""}`}>
             <span
@@ -214,7 +301,8 @@ export const TaskList: React.FC<TaskListProps> = ({
           </ul>
           )}
         </section>
-      ))}
+        );
+      })}
 
       {ctxMenu && (
         <div
