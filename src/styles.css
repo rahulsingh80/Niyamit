@@ -541,6 +541,10 @@ button {
   border-bottom-color: #e0d0d0;
 }
 
+.date-group-heading.section-heading-only {
+  margin-top: 0.5rem;
+}
+
 .task-count {
   font-size: 0.72rem;
   font-weight: 500;

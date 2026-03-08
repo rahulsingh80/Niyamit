@@ -101,14 +101,17 @@ export const TaskList: React.FC<TaskListProps> = ({
           key={group.key}
           className={`date-group${group.isOverdue ? " overdue-group" : ""}`}
         >
-          <div className="date-group-heading">
+          <div className={`date-group-heading${group.isSectionHeading ? " section-heading-only" : ""}`}>
             <span
               className={`date-label${group.isOverdue ? " overdue-label" : ""}`}
             >
               {group.label}
             </span>
-            <span className="task-count">{group.tasks.length}</span>
+            {!group.isSectionHeading && (
+              <span className="task-count">{group.tasks.length}</span>
+            )}
           </div>
+          {!group.isSectionHeading && (
           <ul className="task-list">
             {group.tasks.map((task) => {
               const isSelected = selectedTaskId === task.id;
@@ -209,6 +212,7 @@ export const TaskList: React.FC<TaskListProps> = ({
               );
             })}
           </ul>
+          )}
         </section>
       ))}
 

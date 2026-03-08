@@ -5,6 +5,8 @@ export interface TaskGroup {
   label: string;
   isOverdue: boolean;
   tasks: Task[];
+  /** When true, this group is a section heading only (e.g. "Later"); count may be hidden in UI. */
+  isSectionHeading?: boolean;
 }
 
 /**
@@ -55,34 +57,46 @@ function formatDateLabel(dateStr: string): string {
   });
 }
 
+/** Number of fixed day sections: TODAY, TOMORROW, and the next 5 days (7 total). */
+const FIXED_DAY_COUNT = 7;
+
+function getNextSevenDateStrings(now: Date): { dateStr: string; label: string; key: string }[] {
+  const result: { dateStr: string; label: string; key: string }[] = [];
+  const labels = ["Today", "Tomorrow"];
+  for (let i = 0; i < FIXED_DAY_COUNT; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const dateStr = toLocalDateString(d);
+    const label = i < 2 ? labels[i] : formatDateLabel(dateStr);
+    const key = i === 0 ? "today" : i === 1 ? "tomorrow" : dateStr;
+    result.push({ dateStr, label, key });
+  }
+  return result;
+}
+
 export function groupTasksByDate(tasks: Task[]): TaskGroup[] {
   const now = new Date();
-  const todayStr = toLocalDateString(now);
-  const tomorrowStr = toLocalDateString(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
-  );
+  const nextSeven = getNextSevenDateStrings(now);
+  const lastFixedDateStr = nextSeven[FIXED_DAY_COUNT - 1].dateStr;
 
   const sorted = sortTasks(tasks);
 
   const overdue: Task[] = [];
-  const todayTasks: Task[] = [];
-  const tomorrowTasks: Task[] = [];
-  const futureBuckets = new Map<string, Task[]>();
+  const fixedDayBuckets = nextSeven.map(() => [] as Task[]);
+  const laterByDate = new Map<string, Task[]>();
   const noDueDate: Task[] = [];
 
   for (const task of sorted) {
     if (!task.dueDate) {
       noDueDate.push(task);
-    } else if (task.dueDate < todayStr) {
+    } else if (task.dueDate < nextSeven[0].dateStr) {
       overdue.push(task);
-    } else if (task.dueDate === todayStr) {
-      todayTasks.push(task);
-    } else if (task.dueDate === tomorrowStr) {
-      tomorrowTasks.push(task);
+    } else if (task.dueDate <= lastFixedDateStr) {
+      const idx = nextSeven.findIndex((n) => n.dateStr === task.dueDate);
+      if (idx !== -1) fixedDayBuckets[idx].push(task);
     } else {
-      const bucket = futureBuckets.get(task.dueDate) || [];
+      const bucket = laterByDate.get(task.dueDate) ?? [];
       bucket.push(task);
-      futureBuckets.set(task.dueDate, bucket);
+      laterByDate.set(task.dueDate, bucket);
     }
   }
 
@@ -90,18 +104,32 @@ export function groupTasksByDate(tasks: Task[]): TaskGroup[] {
 
   if (overdue.length)
     groups.push({ key: "overdue", label: "Overdue", isOverdue: true, tasks: overdue });
-  if (todayTasks.length)
-    groups.push({ key: "today", label: "Today", isOverdue: false, tasks: todayTasks });
-  if (tomorrowTasks.length)
-    groups.push({ key: "tomorrow", label: "Tomorrow", isOverdue: false, tasks: tomorrowTasks });
 
-  for (const date of [...futureBuckets.keys()].sort()) {
+  for (let i = 0; i < FIXED_DAY_COUNT; i++) {
     groups.push({
-      key: date,
-      label: formatDateLabel(date),
+      key: nextSeven[i].key,
+      label: nextSeven[i].label,
       isOverdue: false,
-      tasks: futureBuckets.get(date)!,
+      tasks: fixedDayBuckets[i],
     });
+  }
+
+  if (laterByDate.size > 0) {
+    groups.push({
+      key: "later",
+      label: "Later",
+      isOverdue: false,
+      tasks: [],
+      isSectionHeading: true,
+    });
+    for (const dateStr of [...laterByDate.keys()].sort()) {
+      groups.push({
+        key: `later-${dateStr}`,
+        label: formatDateLabel(dateStr),
+        isOverdue: false,
+        tasks: laterByDate.get(dateStr)!,
+      });
+    }
   }
 
   if (noDueDate.length)
