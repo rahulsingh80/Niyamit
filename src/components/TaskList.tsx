@@ -10,6 +10,8 @@ interface TaskListProps {
   onSelectTask?(id: string): void;
   onCloneTask?(id: string): void;
   onUncloneTask?(id: string): void;
+  onDeleteTask?(id: string): void;
+  onSelectProject?(projectId: string): void;
   selectedTaskId?: string | null;
   highlightedTaskId?: string | null;
   projects?: Project[];
@@ -20,6 +22,7 @@ interface ContextMenuState {
   y: number;
   taskId: string;
   isClone: boolean;
+  projectId?: string;
 }
 
 const MAX_PROJECT_NAME_LEN = 18;
@@ -36,6 +39,8 @@ export const TaskList: React.FC<TaskListProps> = ({
   onSelectTask,
   onCloneTask,
   onUncloneTask,
+  onDeleteTask,
+  onSelectProject,
   selectedTaskId,
   highlightedTaskId,
   projects = [],
@@ -77,6 +82,7 @@ export const TaskList: React.FC<TaskListProps> = ({
       y: e.clientY,
       taskId: task.id,
       isClone: !!task.cloneGroupId,
+      projectId: task.projectId,
     });
   }
 
@@ -235,6 +241,29 @@ export const TaskList: React.FC<TaskListProps> = ({
               <span className="ctx-icon">✂</span> Un-clone
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onDeleteTask?.(ctxMenu.taskId);
+              setCtxMenu(null);
+            }}
+          >
+            <span className="ctx-icon">🗑</span> Delete
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!ctxMenu.projectId || !projectMap.has(ctxMenu.projectId)}
+            onClick={() => {
+              if (ctxMenu.projectId && projectMap.has(ctxMenu.projectId)) {
+                onSelectProject?.(ctxMenu.projectId);
+                setCtxMenu(null);
+              }
+            }}
+          >
+            <span className="ctx-icon">📁</span> Project
+          </button>
         </div>
       )}
     </div>

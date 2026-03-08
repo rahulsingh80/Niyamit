@@ -978,6 +978,16 @@ button {
   color: #111827;
 }
 
+.task-context-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-context-menu button:disabled:hover {
+  background: transparent;
+  color: #374151;
+}
+
 .ctx-icon {
   font-size: 0.95em;
   width: 1.1rem;
