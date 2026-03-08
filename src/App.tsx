@@ -92,11 +92,27 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const idleIntervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const shouldWarnOnUnloadRef = useRef(false);
 
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { conflictStateRef.current = conflictState; }, [conflictState]);
   useEffect(() => { saveAppData({ tasks, projects }); }, [tasks, projects]);
+
+  // Warn when closing tab/browser while sync failed or pending (user can cancel and sync first)
+  useEffect(() => {
+    shouldWarnOnUnloadRef.current = !!(syncError || isSyncing || hasPendingChanges);
+  }, [syncError, isSyncing, hasPendingChanges]);
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (shouldWarnOnUnloadRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   const pushUndo = useCallback(() => {
     setUndoStack((prev) => {
