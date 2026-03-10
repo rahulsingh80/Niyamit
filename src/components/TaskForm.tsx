@@ -17,6 +17,8 @@ interface TaskFormProps {
   onCancelEdit?(): void;
   projects?: Project[];
   defaultProjectId?: string | null;
+  /** All existing tag names (for @ autocomplete). */
+  allTags?: string[];
 }
 
 const DEFAULT_PRIORITY: TaskPriority = 3;
@@ -46,6 +48,17 @@ const REMINDER_AC_OPTIONS = [
  */
 function parseReminderTagAtEnd(title: string): { query: string; span: [number, number] } | null {
   const m = title.match(/\s+!(\S*)$/);
+  if (!m) return null;
+  const start = m.index!;
+  return { query: m[1], span: [start, start + m[0].length] };
+}
+
+/**
+ * Find an @tag at the very end of the title (for autocomplete while typing).
+ * Tag is single word (no spaces).
+ */
+function parseTagAtEnd(title: string): { query: string; span: [number, number] } | null {
+  const m = title.match(/@([^\s@]*)$/);
   if (!m) return null;
   const start = m.index!;
   return { query: m[1], span: [start, start + m[0].length] };
@@ -135,6 +148,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   onCancelEdit,
   projects = [],
   defaultProjectId,
+  allTags = [],
 }) => {
   const isEditMode = editingTask != null;
 
@@ -169,6 +183,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   const [reminderAcHighlight, setReminderAcHighlight] = useState(0);
   // Tracks a confirmed project selection from autocomplete (handles multi-word names)
   const [confirmedProject, setConfirmedProject] = useState<{ id: string | null; name: string } | null>(null);
+  // Tags added via form chips or @ in title (merged on submit)
+  const [formTags, setFormTags] = useState<string[]>([]);
+  // Tag autocomplete (@)
+  const [showTagAutoComplete, setShowTagAutoComplete] = useState(false);
+  const [tagAcHighlight, setTagAcHighlight] = useState(0);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -224,6 +243,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       setRecMonth(0);
       setRecDay(1);
     }
+    setFormTags(editingTask.tags ?? []);
     requestAnimationFrame(() => {
       titleInputRef.current?.focus();
       titleInputRef.current?.select();
@@ -246,11 +266,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     parsed.scheduleSpan != null;
   const hasPriorityMatch = !priorityOverridden && parsed.priority != null;
   const hasReminderMatch = !reminderOverridden && parsed.reminder != null && parsed.reminderSpan != null;
+  const hasTagMatch = (parsed.tags?.length ?? 0) > 0 && (parsed.tagSpans?.length ?? 0) > 0;
   const hasAnyHighlight =
     (hasScheduleMatch && parsed.scheduleSpan != null) ||
     (hasPriorityMatch && parsed.prioritySpan != null) ||
     (hasReminderMatch && parsed.reminderSpan != null) ||
-    (hasProjectMatch && parsed.projectSpan != null);
+    (hasProjectMatch && parsed.projectSpan != null) ||
+    hasTagMatch;
   const displayPriority =
     hasPriorityMatch && parsed.priority != null ? parsed.priority : priority;
 
@@ -259,8 +281,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   const effectiveDueTime = timeManuallySet ? dueTime : (hasScheduleMatch ? parsed.dueTime : dueTime);
   const taskHasDueDate = effectiveDueDate != null && effectiveDueDate !== "";
 
-  // ── Project autocomplete (end-anchored for typing) ─────
+  // ── Project / tag / reminder autocomplete (end-anchored) ─
   const projectTag = parseProjectTagAtEnd(title);
+  const tagTag = parseTagAtEnd(title);
   const reminderTag = parseReminderTagAtEnd(title);
   const acCandidates = projectTag
     ? projects.filter((p) =>
@@ -273,6 +296,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     !projects.some(
       (p) => p.name.toLowerCase() === projectTag.query.toLowerCase(),
     );
+  const tagAcCandidates = tagTag
+    ? allTags.filter((t) =>
+        t.toLowerCase().startsWith(tagTag.query.toLowerCase()),
+      )
+    : [];
+  const showCreateTagOption =
+    tagTag &&
+    tagTag.query.length > 0 &&
+    !allTags.some((t) => t.toLowerCase() === tagTag.query.toLowerCase());
   const reminderAcCandidates = reminderTag
     ? REMINDER_AC_OPTIONS.filter((opt) =>
         opt.toLowerCase().startsWith(reminderTag.query.toLowerCase()),
@@ -280,8 +312,23 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     : [];
 
   useEffect(() => {
-    setShowAutoComplete(!!(reminderTag ? false : projectTag && (acCandidates.length > 0 || showCreateOption)));
+    const showProjectAc =
+      !reminderTag &&
+      !tagTag &&
+      projectTag &&
+      (acCandidates.length > 0 || showCreateOption);
+    setShowAutoComplete(!!showProjectAc);
     setAcHighlight(0);
+  }, [title]);
+  useEffect(() => {
+    setShowTagAutoComplete(
+      !!(
+        !reminderTag &&
+        tagTag &&
+        (tagAcCandidates.length > 0 || showCreateTagOption)
+      ),
+    );
+    setTagAcHighlight(0);
   }, [title]);
   useEffect(() => {
     const showReminderAc =
@@ -327,6 +374,30 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     titleInputRef.current?.focus();
   }
 
+  function selectTag(tagName: string) {
+    if (!tagTag) return;
+    const [start, end] = tagTag.span;
+    let before = title.substring(0, start).trimEnd();
+    const after = title.substring(end);
+    const newTitle = (before + (after ? " " + after : "")).trim();
+    setTitle(newTitle);
+    setShowTagAutoComplete(false);
+    setFormTags((prev) =>
+      prev.includes(tagName) ? prev : [...prev, tagName],
+    );
+    titleInputRef.current?.focus();
+  }
+
+  function removeTag(tagToRemove: string) {
+    setFormTags((prev) => prev.filter((t) => t !== tagToRemove));
+    const idx = parsed.tags?.indexOf(tagToRemove) ?? -1;
+    if (idx >= 0 && parsed.tagSpans?.[idx]) {
+      const [s, e] = parsed.tagSpans[idx];
+      let newTitle = title.substring(0, s).trimEnd() + title.substring(e).replace(/^\s+/, "");
+      setTitle(newTitle.trim());
+    }
+  }
+
   // ── Handlers ────────────────────────────────────────────
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newTitle = e.target.value;
@@ -341,6 +412,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   }
 
   const reminderAcList = reminderAcCandidates.length > 0 ? reminderAcCandidates : REMINDER_AC_OPTIONS;
+  const tagAcListLength = tagAcCandidates.length + (showCreateTagOption ? 1 : 0);
   function handleTitleKeyDown(e: React.KeyboardEvent) {
     if (showReminderAutoComplete) {
       const total = reminderAcList.length;
@@ -355,6 +427,25 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         selectReminderOption(reminderAcList[reminderAcHighlight]);
       } else if (e.key === "Escape") {
         setShowReminderAutoComplete(false);
+      }
+      return;
+    }
+    if (showTagAutoComplete) {
+      if (e.key === "ArrowDown" && tagAcListLength > 0) {
+        e.preventDefault();
+        setTagAcHighlight((h) => (h + 1) % tagAcListLength);
+      } else if (e.key === "ArrowUp" && tagAcListLength > 0) {
+        e.preventDefault();
+        setTagAcHighlight((h) => (h - 1 + tagAcListLength) % tagAcListLength);
+      } else if (e.key === "Enter" && tagAcListLength > 0) {
+        e.preventDefault();
+        if (tagAcHighlight < tagAcCandidates.length) {
+          selectTag(tagAcCandidates[tagAcHighlight]);
+        } else if (showCreateTagOption && tagTag) {
+          selectTag(tagTag.query);
+        }
+      } else if (e.key === "Escape") {
+        setShowTagAutoComplete(false);
       }
       return;
     }
@@ -475,6 +566,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       spansToRemove.push(parsed.reminderSpan);
     if (hasProjectMatch && parsed.projectSpan)
       spansToRemove.push(parsed.projectSpan);
+    if (parsed.tagSpans) {
+      for (const span of parsed.tagSpans) spansToRemove.push(span);
+    }
 
     // Resolve project from #tag in title (parsed from end or found anywhere)
     let resolvedProjectId: string | undefined;
@@ -529,6 +623,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       ? { reminder: finalReminder, reminderAcknowledgedAt: undefined, reminderSnoozedUntil: undefined }
       : { reminder: undefined, reminderAcknowledgedAt: undefined, reminderSnoozedUntil: undefined };
 
+    const finalTags = [...new Set([...formTags, ...(parsed.tags ?? [])])];
+
     if (isEditMode && editingTask && onUpdate) {
       onUpdate({
         ...editingTask,
@@ -539,6 +635,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         recurrence: finalRecurrence,
         priority: finalPriority,
         projectId,
+        tags: finalTags.length > 0 ? finalTags : undefined,
         updatedAt: nowIso,
         ...reminderPayload,
       });
@@ -554,6 +651,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         recurrence: finalRecurrence,
         priority: finalPriority,
         projectId,
+        tags: finalTags.length > 0 ? finalTags : undefined,
         createdAt: nowIso,
         updatedAt: nowIso,
         completed: false,
@@ -601,7 +699,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     setReminderOverridden(false);
     setShowAutoComplete(false);
     setShowReminderAutoComplete(false);
+    setShowTagAutoComplete(false);
     setConfirmedProject(null);
+    setFormTags([]);
   }
 
   // ── Highlight rendering ─────────────────────────────────
@@ -615,6 +715,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     if (hasReminderMatch && parsed.reminderSpan) spans.push(parsed.reminderSpan);
     if (hasProjectMatch && parsed.projectSpan) spans.push(parsed.projectSpan);
     else if (projectHighlightSpan) spans.push(projectHighlightSpan);
+    if (parsed.tagSpans) spans.push(...parsed.tagSpans);
+    if (tagHighlightSpan && !parsed.tagSpans?.some(([s]) => s === tagHighlightSpan[0])) {
+      spans.push(tagHighlightSpan);
+    }
     if (spans.length === 0) return null;
     spans.sort((a, b) => a[0] - b[0]);
     const parts: React.ReactNode[] = [];
@@ -633,8 +737,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     );
   }
 
+  const tagHighlightSpan =
+    tagTag && tagTag.query.length > 0 ? tagTag.span : null;
   const hasHighlightIncludingProject =
-    hasAnyHighlight || projectHighlightSpan != null;
+    hasAnyHighlight || projectHighlightSpan != null || tagHighlightSpan != null;
 
   // ── Hint text ───────────────────────────────────────────
   const hintParts: string[] = [];
@@ -662,6 +768,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       hintParts.push(matchedProject ? `#${matchedProject.name}` : `#${tagInTitle.query} (new)`);
     }
   }
+  const displayTags = [...new Set([...formTags, ...(parsed.tags ?? [])])];
+  if (displayTags.length > 0) {
+    hintParts.push(displayTags.map((t) => `@${t}`).join(" "));
+  }
 
   // ── JSX ─────────────────────────────────────────────────
   return (
@@ -677,7 +787,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
             value={title}
             onChange={handleTitleChange}
             onKeyDown={handleTitleKeyDown}
-            placeholder='What do you need to do? Use # for project'
+            placeholder='What do you need to do? Use # for project, @ for tag'
             required
           />
           {showAutoComplete && (
@@ -738,11 +848,55 @@ export const TaskForm: React.FC<TaskFormProps> = ({
               )}
             </div>
           )}
+          {showTagAutoComplete && (
+            <div className="project-autocomplete tag-autocomplete">
+              {tagAcCandidates.map((tag, i) => (
+                <div
+                  key={tag}
+                  className={`project-autocomplete-item${i === tagAcHighlight ? " highlighted" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectTag(tag);
+                  }}
+                >
+                  @{tag}
+                </div>
+              ))}
+              {showCreateTagOption && tagTag && (
+                <div
+                  className={`project-autocomplete-item create${tagAcHighlight === tagAcCandidates.length ? " highlighted" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectTag(tagTag.query);
+                  }}
+                >
+                  Create &ldquo;@{tagTag.query}&rdquo;
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {hintParts.length > 0 && (
           <span className="date-hint">
             {"\u2192 "}{hintParts.join(" \u00b7 ")}
           </span>
+        )}
+        {displayTags.length > 0 && (
+          <div className="task-form-tags">
+            {displayTags.map((t) => (
+              <span key={t} className="pill tag-pill">
+                @{t}
+                <button
+                  type="button"
+                  className="tag-pill-remove"
+                  onClick={() => removeTag(t)}
+                  aria-label={`Remove tag ${t}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
         )}
       </div>
 

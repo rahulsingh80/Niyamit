@@ -294,6 +294,13 @@ export const TaskList: React.FC<TaskListProps> = ({
                         </span>
                       </div>
                     )}
+                    {task.tags && task.tags.length > 0 && (
+                      <div className="task-tags">
+                        {task.tags.map((tag) => (
+                          <span key={tag} className="pill tag-pill">@{tag}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </li>
               );

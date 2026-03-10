@@ -20,6 +20,10 @@ export interface ParsedInput {
   projectTag?: string;
   /** Span [start, end) of #tag in the raw input when at end */
   projectSpan?: [number, number];
+  /** Tags parsed from @word at end of title (single word each, any order with other tail tokens). */
+  tags?: string[];
+  /** Spans for each @word in raw input (same order as tags, for stripping). */
+  tagSpans?: [number, number][];
 }
 
 // ── Constants ───────────────────────────────────────────
@@ -342,6 +346,26 @@ interface ProjectMatch {
   span: [number, number];
 }
 
+// ── Tag at end (@word, single word no spaces) ─────────────
+
+interface TagMatch {
+  prefix: string;
+  tag: string;
+  span: [number, number];
+}
+
+function tryMatchTagAtEnd(input: string, inputStart: number): TagMatch | null {
+  // Single word after @: non-space, non-@ chars only
+  const m = input.match(/\s+@([^\s@]+)\s*$/);
+  if (!m) return null;
+  const start = (m.index ?? 0) + inputStart;
+  return {
+    prefix: input.substring(0, m.index).trimEnd(),
+    tag: m[1],
+    span: [start, start + m[0].length],
+  };
+}
+
 // ── Project tag at end (#word or #"quoted") ─────────────
 
 function tryMatchProjectAtEnd(input: string, inputStart: number): ProjectMatch | null {
@@ -376,7 +400,7 @@ const BEFORE_MINUTES: Record<string, number> = {
 
 function tryMatchReminder(input: string, inputStart: number): ReminderMatch | null {
   // Require ! not followed by ! (so we match " !30 min" but not " !!2"); body stops before \s*!! or \s*# or end
-  const m = input.match(/\s+!(?!!)(.+?)\s*(?=\s*!!|\s*#|$)/);
+  const m = input.match(/\s+!(?!!)(.+?)\s*(?=\s*!!|\s*#|\s*@|$)/);
   if (!m) return null;
   const prefix = input.substring(0, m.index).trimEnd();
   const body = m[1].trim();
@@ -722,7 +746,8 @@ type TailMatch =
   | { kind: "reminder"; prefix: string; span: [number, number]; reminder: Reminder }
   | { kind: "priority"; prefix: string; span: [number, number]; priority: TaskPriority }
   | { kind: "schedule"; prefix: string; span: [number, number]; schedule: ScheduleMatch }
-  | { kind: "project"; prefix: string; span: [number, number]; projectTag: string };
+  | { kind: "project"; prefix: string; span: [number, number]; projectTag: string }
+  | { kind: "tag"; prefix: string; span: [number, number]; tag: string };
 
 function pickRightmostTailMatch(
   input: string,
@@ -783,6 +808,17 @@ function pickRightmostTailMatch(
     };
   }
 
+  const tagMatch = tryMatchTagAtEnd(input, firstNonWs);
+  if (tagMatch && tagMatch.span[0] > bestStart) {
+    bestStart = tagMatch.span[0];
+    best = {
+      kind: "tag",
+      prefix: tagMatch.prefix,
+      span: tagMatch.span,
+      tag: tagMatch.tag,
+    };
+  }
+
   return best;
 }
 
@@ -804,6 +840,8 @@ export function parseTitleInput(rawTitle: string): ParsedInput {
   let reminderSpan: [number, number] | undefined;
   let projectTag: string | undefined;
   let projectSpan: [number, number] | undefined;
+  const collectedTags: string[] = [];
+  const collectedTagSpans: [number, number][] = [];
 
   while (input.length > 0) {
     const match = pickRightmostTailMatch(input, firstNonWs);
@@ -828,6 +866,11 @@ export function parseTitleInput(rawTitle: string): ParsedInput {
       case "project":
         projectTag = match.projectTag;
         projectSpan = match.span;
+        input = match.prefix;
+        break;
+      case "tag":
+        collectedTags.unshift(match.tag);
+        collectedTagSpans.unshift(match.span);
         input = match.prefix;
         break;
     }
@@ -860,5 +903,7 @@ export function parseTitleInput(rawTitle: string): ParsedInput {
     prioritySpan,
     reminderSpan,
     projectSpan,
+    tags: collectedTags.length > 0 ? collectedTags : undefined,
+    tagSpans: collectedTagSpans.length > 0 ? collectedTagSpans : undefined,
   };
 }

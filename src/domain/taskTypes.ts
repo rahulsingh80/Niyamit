@@ -63,4 +63,6 @@ export interface Task {
   reminderAcknowledgedAt?: string;
   /** Snooze until this time (ISO); reminder shows again when now >= this. */
   reminderSnoozedUntil?: string;
+  /** Tags (single-word labels). Stored in same tasks JSON. */
+  tags?: string[];
 }

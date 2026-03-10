@@ -68,6 +68,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [showSyncSuccess, setShowSyncSuccess] = useState(false);
@@ -431,6 +432,32 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     if (selectedProjectId && idsToDelete.has(selectedProjectId)) setSelectedProjectId(null);
   }
 
+  function handleRenameTag(oldName: string, newName: string) {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed.includes(" ") || trimmed === oldName) return;
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const newTasks = tasks.map((t) => {
+      if (!t.tags?.includes(oldName)) return t;
+      const updated = [...new Set(t.tags.map((tag) => (tag === oldName ? trimmed : tag)))];
+      return { ...t, tags: updated.length > 0 ? updated : undefined, updatedAt: nowIso };
+    });
+    applyLocalChange(newTasks, projects);
+    if (selectedTag === oldName) setSelectedTag(trimmed);
+  }
+
+  function handleDeleteTag(tagName: string) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const newTasks = tasks.map((t) => {
+      if (!t.tags?.includes(tagName)) return t;
+      const updated = t.tags.filter((t) => t !== tagName);
+      return { ...t, tags: updated.length > 0 ? updated : undefined, updatedAt: nowIso };
+    });
+    applyLocalChange(newTasks, projects);
+    if (selectedTag === tagName) setSelectedTag(null);
+  }
+
   function handleMoveTaskToProject(taskId: string, projectId: string) {
     pushUndo();
     const nowIso = new Date().toISOString();
@@ -522,12 +549,24 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     await runSync("conflict-resolution");
   }
 
-  // ── Filtered tasks for project view ───────────────────
+  // ── All tags from tasks (for sidebar list) ─────────────
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach((t) => t.tags?.forEach((tag) => set.add(tag)));
+    return Array.from(set).sort();
+  }, [tasks]);
+
+  // ── Filtered tasks for project or tag view ──────────────
   const filteredTasks = useMemo(() => {
-    if (!selectedProjectId) return tasks;
-    const ids = new Set(getDescendantIds(selectedProjectId, projects));
-    return tasks.filter((t) => t.projectId && ids.has(t.projectId));
-  }, [tasks, projects, selectedProjectId]);
+    if (selectedTag) {
+      return tasks.filter((t) => t.tags?.includes(selectedTag));
+    }
+    if (selectedProjectId) {
+      const ids = new Set(getDescendantIds(selectedProjectId, projects));
+      return tasks.filter((t) => t.projectId && ids.has(t.projectId));
+    }
+    return tasks;
+  }, [tasks, projects, selectedProjectId, selectedTag]);
 
   const dueReminders = useMemo(() => getDueReminders(tasks), [tasks]);
 
@@ -621,12 +660,23 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           projects={projects}
           allProjects={projects}
           selectedProjectId={selectedProjectId}
+          selectedTag={selectedTag}
+          allTags={allTags}
           isFormOpen={isFormOpen}
           editingTask={editingTask}
-          onSelectProject={setSelectedProjectId}
+          onSelectProject={(id) => {
+            setSelectedProjectId(id);
+            setSelectedTag(null);
+          }}
+          onSelectTag={(tag) => {
+            setSelectedTag(tag);
+            if (tag != null) setSelectedProjectId(null);
+          }}
           onCreateProject={handleCreateProject}
           onRenameProject={handleRenameProject}
           onDeleteProject={handleDeleteProject}
+          onRenameTag={handleRenameTag}
+          onDeleteTag={handleDeleteTag}
           onMoveTaskToProject={handleMoveTaskToProject}
           onMoveProject={handleMoveProject}
           onReorderProject={handleReorderProject}
@@ -641,6 +691,14 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           {selectedProject && (
             <div className="project-view-header">
               <h2>{selectedProject.name}</h2>
+              <span className="task-count">
+                {filteredTasks.filter((t) => !t.completed && !t.deleted).length}
+              </span>
+            </div>
+          )}
+          {selectedTag && !selectedProject && (
+            <div className="project-view-header tag-view-header">
+              <h2>@{selectedTag}</h2>
               <span className="task-count">
                 {filteredTasks.filter((t) => !t.completed && !t.deleted).length}
               </span>

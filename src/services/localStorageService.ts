@@ -22,6 +22,7 @@ function normalizeTasks(tasks: unknown[]): Task[] {
     reminder: task.reminder || undefined,
     reminderAcknowledgedAt: task.reminderAcknowledgedAt || undefined,
     reminderSnoozedUntil: task.reminderSnoozedUntil || undefined,
+    tags: task.tags ?? undefined,
   }));
 }
 
