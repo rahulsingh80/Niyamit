@@ -250,6 +250,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     });
   }, [editingTask]);
 
+  // Focus title when opening Create Task so user can type immediately
+  useEffect(() => {
+    if (editingTask != null) return;
+    const id = requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [editingTask]);
+
   // ── Parse schedule, priority, reminder, project from tail (any order) ────────
   const rawParsed = parseTitleInput(title);
   const parsed = rawParsed;
