@@ -6,12 +6,13 @@ export interface AppData {
   projects: Project[];
 }
 
-/** JSON file format: separate sections for active, completed, deleted tasks, projects, and tags. */
+/** JSON file format: separate sections for active/completed/deleted tasks, active/deleted projects, and tags. */
 export interface SerializedAppData {
   activeTasks: Task[];
   completedTasks: Task[];
   deletedTasks: Task[];
-  projects: Project[];
+  activeProjects: Project[];
+  deletedProjects: Project[];
   tags: string[];
 }
 
@@ -45,18 +46,21 @@ function isCompletedTask(t: Task): boolean {
   return t.completed && !t.deleted && !t.recurrence;
 }
 
-/** Convert in-memory AppData to the serialized JSON shape (activeTasks, completedTasks, deletedTasks, projects, tags). */
+/** Convert in-memory AppData to the serialized JSON shape (activeTasks, completedTasks, deletedTasks, activeProjects, deletedProjects, tags). */
 export function toSerialized(data: AppData): SerializedAppData {
   const activeTasks = data.tasks.filter((t) => isActiveTask(t) || t.recurrence);
   const completedTasks = data.tasks.filter(isCompletedTask);
   const deletedTasks = data.tasks.filter((t) => t.deleted);
+  const activeProjects = data.projects.filter((p) => !p.deleted);
+  const deletedProjects = data.projects.filter((p) => p.deleted);
   const tagSet = new Set<string>();
   data.tasks.forEach((t) => t.tags?.forEach((tag) => tagSet.add(tag)));
   return {
     activeTasks,
     completedTasks,
     deletedTasks,
-    projects: data.projects,
+    activeProjects,
+    deletedProjects,
     tags: Array.from(tagSet).sort(),
   };
 }
@@ -69,7 +73,12 @@ export function fromSerialized(parsed: unknown): AppData | null {
   if (Array.isArray(obj.activeTasks) && Array.isArray(obj.completedTasks)) {
     const deletedTasks = Array.isArray(obj.deletedTasks) ? obj.deletedTasks : [];
     const tasks = normalizeTasks([...obj.activeTasks, ...obj.completedTasks, ...deletedTasks]);
-    const projects = Array.isArray(obj.projects) ? (obj.projects as Project[]) : [];
+    let projects: Project[];
+    if (Array.isArray(obj.activeProjects) && Array.isArray(obj.deletedProjects)) {
+      projects = [...(obj.activeProjects as Project[]), ...(obj.deletedProjects as Project[])];
+    } else {
+      projects = Array.isArray(obj.projects) ? (obj.projects as Project[]) : [];
+    }
     return { tasks, projects };
   }
 
