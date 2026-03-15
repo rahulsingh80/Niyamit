@@ -1,8 +1,9 @@
 import type { Task } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
+import { toSerialized } from "@services/localStorageService";
 
 /**
- * Export tasks and projects to a JSON file and trigger a download in the browser.
+ * Export tasks and projects to a JSON file (activeTasks, completedTasks, projects, tags) and trigger a download.
  */
 export function exportDataAsJson(
   tasks: Task[],
@@ -11,10 +12,7 @@ export function exportDataAsJson(
 ) {
   if (typeof window === "undefined") return;
 
-  const backup = {
-    tasks,
-    projects,
-  };
+  const backup = toSerialized({ tasks, projects });
 
   const json = JSON.stringify(backup, null, 2);
   const blob = new Blob([json], { type: "application/json" });

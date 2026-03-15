@@ -1,6 +1,6 @@
 import type { Task } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
-import type { AppData } from "@services/localStorageService";
+import { type AppData, toSerialized, fromSerialized } from "@services/localStorageService";
 
 const DRIVE_API_URL = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3";
@@ -130,25 +130,23 @@ export async function getOrCreateDataFileId(accessToken: string): Promise<string
   }
 
   const initial: AppData = { tasks, projects };
-  return createJsonFile(accessToken, DATA_FILE_NAME, folderId, JSON.stringify(initial, null, 2));
+  const serialized = toSerialized(initial);
+  return createJsonFile(accessToken, DATA_FILE_NAME, folderId, JSON.stringify(serialized, null, 2));
 }
 
 export async function downloadAppDataFromDrive(accessToken: string, fileId: string): Promise<AppData> {
   const raw = await downloadJsonFileRaw(accessToken, fileId);
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const obj = raw as Record<string, unknown>;
-    return {
-      tasks: Array.isArray(obj.tasks) ? obj.tasks as Task[] : [],
-      projects: Array.isArray(obj.projects) ? obj.projects as Project[] : [],
-    };
+    const data = fromSerialized(raw);
+    if (data) return data;
   }
-  // Handle legacy format: bare Task[]
   if (Array.isArray(raw)) return { tasks: raw as Task[], projects: [] };
   return { tasks: [], projects: [] };
 }
 
 export async function uploadAppDataToDrive(accessToken: string, fileId: string, data: AppData): Promise<void> {
-  await updateJsonFile(accessToken, fileId, JSON.stringify(data, null, 2));
+  const serialized = toSerialized(data);
+  await updateJsonFile(accessToken, fileId, JSON.stringify(serialized, null, 2));
 }
 
 // ── Merge logic ─────────────────────────────────────────
