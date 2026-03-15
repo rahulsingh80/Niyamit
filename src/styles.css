@@ -582,6 +582,55 @@ button {
   gap: 0.5rem;
 }
 
+/* Toggle in first date-group heading row */
+.date-group-heading-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.bulk-select-toggle {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+
+.bulk-select-toggle:hover {
+  color: #374151;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.bulk-select-toggle-icon {
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+/* When checkboxes visible, task rows have a fixed-width checkbox column */
+.task-list-container.bulk-checkboxes-visible .task-list-item .task-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-list-container.bulk-checkboxes-visible .task-select-checkbox {
+  flex: 0 0 2rem;
+  width: 2rem;
+}
+
+.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 0;
+}
+
 .task-item {
   display: flex;
   align-items: flex-start;
@@ -589,10 +638,25 @@ button {
   padding: 0.55rem 0.5rem;
   border-radius: 0.5rem;
   transition: background 0.12s ease;
+  flex: 1;
+  min-width: 0;
 }
 
 .task-item:hover {
   background: rgba(99, 102, 241, 0.04);
+}
+
+.task-select-checkbox {
+  flex-shrink: 0;
+  padding-top: 0.45rem;
+  align-self: flex-start;
+}
+
+.task-select-checkbox input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: #6366f1;
 }
 
 .task-complete-toggle {
@@ -1078,6 +1142,147 @@ button {
 .ctx-submenu button {
   padding-left: 1.8rem;
   font-size: 0.82rem;
+}
+
+/* ── Bulk action bar ─────────────────────────────────── */
+
+.bulk-action-bar-wrapper {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.bulk-action-bar-wrapper.is-open {
+  max-height: 10rem;
+}
+
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.bulk-action-bar-label {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-right: 0.25rem;
+}
+
+.bulk-action-btn {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.bulk-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.bulk-modal {
+  width: min(400px, 100%);
+  padding: 1.25rem;
+}
+
+.bulk-modal p {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.bulk-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.bulk-priority-options {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1rem;
+}
+
+.bulk-priority-options button.priority-1 { accent-color: #b07070; }
+.bulk-priority-options button.priority-2 { accent-color: #9a8540; }
+.bulk-priority-options button.priority-3 { accent-color: #607898; }
+.bulk-priority-options button.priority-4 { accent-color: #999; }
+
+/* ── Project / Tag select (autocomplete) ─────────────── */
+
+.project-select,
+.tag-select {
+  position: relative;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.project-select-input,
+.tag-select-input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: white;
+}
+
+.project-select-input:focus,
+.tag-select-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.project-select-dropdown,
+.tag-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.2rem;
+  max-height: 220px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+  z-index: 50;
+  list-style: none;
+  padding: 0.25rem;
+  margin: 0;
+}
+
+.project-select-option,
+.tag-select-option {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.88rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  color: #374151;
+}
+
+.project-select-option:hover,
+.project-select-option.highlighted,
+.tag-select-option:hover,
+.tag-select-option.highlighted {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.project-select-option.create-option,
+.tag-select-option.create-option {
+  color: #6366f1;
+  font-weight: 500;
 }
 
 /* ── Sidebar layout ──────────────────────────────────── */

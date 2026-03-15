@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
-import type { Task } from "@domain/taskTypes";
+import type { Task, TaskPriority } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
 import { getDescendantIds } from "@domain/projectTypes";
 import { advanceRecurrence } from "@domain/dateParser";
@@ -15,6 +15,8 @@ import {
 import { getDueReminders } from "@domain/reminderUtils";
 import { ProjectSidebar } from "@components/ProjectSidebar";
 import { TaskList } from "@components/TaskList";
+import { BulkActionBar } from "@components/BulkActionBar";
+import { NEW_PROJECT_PREFIX } from "@components/ProjectSelect";
 import { RemindersSection } from "@components/RemindersSection";
 import "./styles.css";
 
@@ -76,6 +78,11 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const [isIdle, setIsIdle] = useState(false);
   const [conflictState, setConflictState] = useState<ConflictState | null>(null);
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set());
+  const [showBulkCheckboxes, setShowBulkCheckboxes] = useState(false);
+  const [isBulkBarClosing, setIsBulkBarClosing] = useState(false);
+  const bulkBarClosingIdsRef = useRef<string[]>([]);
+  const bulkBarCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const [undoStack, setUndoStack] = useState<AppData[]>([]);
   const [redoStack, setRedoStack] = useState<AppData[]>([]);
@@ -98,6 +105,31 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { conflictStateRef.current = conflictState; }, [conflictState]);
+
+  // Keep last selected ids for bulk bar close animation
+  useEffect(() => {
+    if (selectedTaskIds.size > 0) {
+      bulkBarClosingIdsRef.current = Array.from(selectedTaskIds);
+      setIsBulkBarClosing(false);
+      if (bulkBarCloseTimerRef.current) {
+        clearTimeout(bulkBarCloseTimerRef.current);
+        bulkBarCloseTimerRef.current = undefined;
+      }
+    }
+  }, [selectedTaskIds]);
+
+  useEffect(() => {
+    if (selectedTaskIds.size === 0 && bulkBarClosingIdsRef.current.length > 0) {
+      bulkBarCloseTimerRef.current = setTimeout(() => {
+        bulkBarClosingIdsRef.current = [];
+        setIsBulkBarClosing(false);
+        bulkBarCloseTimerRef.current = undefined;
+      }, 300);
+    }
+    return () => {
+      if (bulkBarCloseTimerRef.current) clearTimeout(bulkBarCloseTimerRef.current);
+    };
+  }, [selectedTaskIds.size]);
   useEffect(() => { saveAppData({ tasks, projects }); }, [tasks, projects]);
 
   // Warn when closing tab/browser while sync failed or pending (user can cancel and sync first)
@@ -464,6 +496,95 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     applyLocalChange(tasks.map((t) => t.id === taskId ? { ...t, projectId, updatedAt: nowIso } : t));
   }
 
+  // ── Bulk selection and operations ─────────────────────
+  function prepareBulkBarClose() {
+    if (selectedTaskIds.size > 0) {
+      bulkBarClosingIdsRef.current = Array.from(selectedTaskIds);
+      setIsBulkBarClosing(true);
+    }
+  }
+
+  function handleToggleTaskSelection(id: string, selected: boolean) {
+    const next = new Set(selectedTaskIds);
+    if (selected) next.add(id);
+    else next.delete(id);
+    if (next.size === 0 && selectedTaskIds.size > 0) {
+      prepareBulkBarClose();
+    }
+    setSelectedTaskIds(next);
+  }
+
+  function handleClearSelection() {
+    prepareBulkBarClose();
+    setSelectedTaskIds(new Set());
+  }
+
+  function handleBulkDelete(ids: string[]) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const idSet = new Set(ids);
+    applyLocalChange(
+      tasks.map((t) => (idSet.has(t.id) ? { ...t, deleted: true, updatedAt: nowIso } : t)),
+    );
+    prepareBulkBarClose();
+    setSelectedTaskIds(new Set());
+    if (editingTask && idSet.has(editingTask.id)) {
+      setEditingTask(null);
+      setIsFormOpen(false);
+    }
+  }
+
+  function handleBulkSetPriority(ids: string[], priority: TaskPriority) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const idSet = new Set(ids);
+    applyLocalChange(
+      tasks.map((t) => (idSet.has(t.id) ? { ...t, priority, updatedAt: nowIso } : t)),
+    );
+    prepareBulkBarClose();
+    setSelectedTaskIds(new Set());
+  }
+
+  function handleBulkAddToProject(ids: string[], projectIdOrNew: string) {
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const idSet = new Set(ids);
+    let resolvedProjectId = projectIdOrNew;
+    let newProjects = projects;
+    if (projectIdOrNew.startsWith(NEW_PROJECT_PREFIX)) {
+      const name = projectIdOrNew.slice(NEW_PROJECT_PREFIX.length);
+      const newProj: Project = { id: genId(), name, createdAt: nowIso };
+      newProjects = [...projects, newProj];
+      resolvedProjectId = newProj.id;
+    }
+    applyLocalChange(
+      tasks.map((t) =>
+        idSet.has(t.id) ? { ...t, projectId: resolvedProjectId, updatedAt: nowIso } : t,
+      ),
+      newProjects,
+    );
+    prepareBulkBarClose();
+    setSelectedTaskIds(new Set());
+  }
+
+  function handleBulkApplyTag(ids: string[], tag: string) {
+    const trimmed = tag.trim();
+    if (!trimmed || trimmed.includes(" ")) return;
+    pushUndo();
+    const nowIso = new Date().toISOString();
+    const idSet = new Set(ids);
+    applyLocalChange(
+      tasks.map((t) => {
+        if (!idSet.has(t.id)) return t;
+        const tags = [...(t.tags ?? [])];
+        if (!tags.includes(trimmed)) tags.push(trimmed);
+        return { ...t, tags, updatedAt: nowIso };
+      }),
+    );
+    prepareBulkBarClose();
+    setSelectedTaskIds(new Set());
+  }
+
   function handleMoveProject(id: string, newParentId: string | undefined) {
     pushUndo();
     const nowIso = new Date().toISOString();
@@ -704,6 +825,21 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
               </span>
             </div>
           )}
+          <div className={`bulk-action-bar-wrapper${selectedTaskIds.size > 0 ? " is-open" : ""}`}>
+            {(selectedTaskIds.size > 0 || isBulkBarClosing) && (
+              <BulkActionBar
+                selectedTaskIds={selectedTaskIds.size > 0 ? Array.from(selectedTaskIds) : bulkBarClosingIdsRef.current}
+                tasks={tasks}
+                projects={projects}
+                allTags={allTags}
+                onClearSelection={handleClearSelection}
+                onBulkDelete={handleBulkDelete}
+                onBulkSetPriority={handleBulkSetPriority}
+                onBulkAddToProject={handleBulkAddToProject}
+                onBulkApplyTag={handleBulkApplyTag}
+              />
+            )}
+          </div>
           <TaskList
             tasks={filteredTasks}
             onCompleteTask={handleCompleteTask}
@@ -716,6 +852,10 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
             selectedTaskId={editingTask?.id}
             highlightedTaskId={highlightedTaskId}
             projects={projects}
+            selectedTaskIds={selectedTaskIds}
+            onToggleTaskSelection={handleToggleTaskSelection}
+            showBulkCheckboxes={showBulkCheckboxes}
+            onToggleBulkCheckboxes={() => setShowBulkCheckboxes((v) => !v)}
           />
         </div>
       </main>

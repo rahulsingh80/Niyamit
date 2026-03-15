@@ -16,6 +16,12 @@ interface TaskListProps {
   selectedTaskId?: string | null;
   highlightedTaskId?: string | null;
   projects?: Project[];
+  /** Multi-select for bulk operations */
+  selectedTaskIds?: Set<string>;
+  onToggleTaskSelection?(id: string, selected: boolean): void;
+  /** When false, checkboxes are hidden; toggle row still shown when onToggleBulkCheckboxes is provided */
+  showBulkCheckboxes?: boolean;
+  onToggleBulkCheckboxes?(): void;
 }
 
 interface ContextMenuState {
@@ -72,6 +78,10 @@ export const TaskList: React.FC<TaskListProps> = ({
   selectedTaskId,
   highlightedTaskId,
   projects = [],
+  selectedTaskIds,
+  onToggleTaskSelection,
+  showBulkCheckboxes = false,
+  onToggleBulkCheckboxes,
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [dragOverGroupKey, setDragOverGroupKey] = useState<string | null>(null);
@@ -175,11 +185,14 @@ export const TaskList: React.FC<TaskListProps> = ({
     );
   }
 
+  const hasBulkToggle = onToggleBulkCheckboxes != null;
+
   return (
-    <div className="task-list-container">
-      {groups.map((group) => {
+    <div className={`task-list-container${showBulkCheckboxes ? " bulk-checkboxes-visible" : ""}`}>
+      {groups.map((group, groupIndex) => {
         const droppable = isDroppableGroup(group, todayStr, tomorrowStr);
         const isDragOver = dragOverGroupKey === group.key;
+        const isFirstGroup = groupIndex === 0;
         return (
         <section
           key={group.key}
@@ -197,6 +210,23 @@ export const TaskList: React.FC<TaskListProps> = ({
             {!group.isSectionHeading && (
               <span className="task-count">{group.tasks.length}</span>
             )}
+            {isFirstGroup && hasBulkToggle && (
+              <>
+                <span className="date-group-heading-spacer" />
+                <button
+                  type="button"
+                  className="bulk-select-toggle"
+                  onClick={onToggleBulkCheckboxes}
+                  aria-expanded={showBulkCheckboxes}
+                  aria-label={showBulkCheckboxes ? "Hide selection checkboxes" : "Show selection checkboxes"}
+                  title={showBulkCheckboxes ? "Hide selection checkboxes" : "Show selection checkboxes"}
+                >
+                  <span className="bulk-select-toggle-icon" aria-hidden>
+                    {showBulkCheckboxes ? "▼" : "▶"}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
           {!group.isSectionHeading && (
           <ul className="task-list">
@@ -207,22 +237,23 @@ export const TaskList: React.FC<TaskListProps> = ({
               if (isSelected) className += " task-selected";
               if (isHighlighted) className += " task-highlight-flash";
               return (
-                <li
-                  key={task.id}
-                  className={className}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("text/plain", task.id);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest(".task-complete-toggle")) return;
-                    onSelectTask?.(task.id);
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, task)}
-                  style={{ cursor: onSelectTask ? "pointer" : undefined }}
-                >
-                  <div className="task-complete-toggle">
+                <li key={task.id} className="task-list-item">
+                  <div
+                    className={className}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", task.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest(".task-complete-toggle")) return;
+                      if ((e.target as HTMLElement).closest(".task-select-checkbox")) return;
+                      onSelectTask?.(task.id);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, task)}
+                    style={{ cursor: onSelectTask ? "pointer" : undefined }}
+                  >
+                    <div className="task-complete-toggle">
                     <input
                       type="radio"
                       name={`task-complete-${task.id}`}
@@ -301,7 +332,22 @@ export const TaskList: React.FC<TaskListProps> = ({
                         ))}
                       </div>
                     )}
+                    </div>
                   </div>
+                  {onToggleTaskSelection && showBulkCheckboxes && (
+                    <div className="task-select-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds?.has(task.id) ?? false}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          onToggleTaskSelection(task.id, e.target.checked);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Select task for bulk actions"
+                      />
+                    </div>
+                  )}
                 </li>
               );
             })}
