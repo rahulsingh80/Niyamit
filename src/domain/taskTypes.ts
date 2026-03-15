@@ -22,6 +22,8 @@ export interface RecurrenceRule {
   day?: number;
   /** When the interval was derived from "every Nth <weekday>", stores the weekday for display. */
   anchorWeekday?: number;
+  /** First occurrence date (YYYY-MM-DD). Used when type = 'interval' with "starting next week" etc. */
+  anchorDate?: string;
   /** Day-of-week (0–6). Used when type = 'weekdayOfMonth' (e.g. first Saturday of every month). */
   weekday?: number;
   /** 1=first, 2=second, 3=third, 4=fourth, 5=last. Used when type = 'weekdayOfMonth'. */

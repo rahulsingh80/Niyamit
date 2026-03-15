@@ -106,6 +106,31 @@ function nextWeekday(dayIdx: number): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
 }
 
+/** Weekday (0–6) of the week that contains the given date. */
+function weekdayOfWeekContaining(date: Date, weekday: number): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const sun = d.getDate() - d.getDay();
+  const target = sun + weekday;
+  return new Date(d.getFullYear(), d.getMonth(), target);
+}
+
+/** Next week = week after current. Returns the given weekday in that week. */
+function nextWeekWeekday(weekday: number): Date {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const nextWeekRef = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+  return weekdayOfWeekContaining(nextWeekRef, weekday);
+}
+
+/** First date on or after `from` that has the given weekday (0–6). */
+function firstWeekdayOnOrAfter(from: Date, weekday: number): Date {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  while (d.getDay() !== weekday) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d;
+}
+
 function nextMonthDay(month: number, day: number, year?: number): Date {
   if (year != null) return new Date(year, month, day);
   const now = new Date();
@@ -182,6 +207,14 @@ export function computeNextOccurrence(rule: RecurrenceRule): Date {
       return today;
     }
     case "interval": {
+      if (rule.anchorDate != null) {
+        let next = new Date(rule.anchorDate);
+        const interval = rule.intervalDays ?? 1;
+        while (next < today) {
+          next = new Date(next.getFullYear(), next.getMonth(), next.getDate() + interval);
+        }
+        return next;
+      }
       if (rule.anchorWeekday != null) {
         let diff = rule.anchorWeekday - today.getDay();
         if (diff < 0) diff += 7;
@@ -816,8 +849,8 @@ function tryMatchRecurrence(input: string): RecurrenceMatch | null {
     }
   }
 
-  // ─ "Nth / alternate / other <dayname>" ─
-  const nthRE = `^(?:(\\d+)(?:st|nd|rd|th)?|alternate|other|second|third|fourth)\\s+(${DAY_RE})$`;
+  // ─ "Nth / alternate / other <dayname>" with optional " starting next week" / " starting after N week(s)" ─
+  const nthRE = `^(?:(\\d+)(?:st|nd|rd|th)?|alternate|other|second|third|fourth)\\s+(${DAY_RE})(?:\\s+starting\\s+(next\\s+week|after\\s+(\\d+)\\s+weeks?))?$`;
   const nthM = body.match(re(nthRE));
   if (nthM) {
     let n: number;
@@ -832,9 +865,24 @@ function tryMatchRecurrence(input: string): RecurrenceMatch | null {
     }
     const dayIdx = DAY_MAP[nthM[2].toLowerCase().substring(0, 3)];
     if (dayIdx != null && n > 0) {
+      let anchorDate: string | undefined;
+      const startPhrase = nthM[3]?.toLowerCase().trim();
+      if (startPhrase === "next week") {
+        anchorDate = toDateStr(nextWeekWeekday(dayIdx));
+      } else if (startPhrase && startPhrase.startsWith("after") && nthM[4]) {
+        const weeks = parseInt(nthM[4], 10);
+        const from = new Date();
+        const fromDate = new Date(from.getFullYear(), from.getMonth(), from.getDate() + weeks * 7);
+        anchorDate = toDateStr(firstWeekdayOnOrAfter(fromDate, dayIdx));
+      }
       return {
         prefix,
-        recurrence: { type: "interval", intervalDays: n * 7, anchorWeekday: dayIdx },
+        recurrence: {
+          type: "interval",
+          intervalDays: n * 7,
+          anchorWeekday: dayIdx,
+          ...(anchorDate != null && { anchorDate }),
+        },
         dueTime: time,
       };
     }
