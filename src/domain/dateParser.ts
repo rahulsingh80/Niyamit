@@ -116,6 +116,26 @@ function nextMonthDay(month: number, day: number, year?: number): Date {
     : new Date(now.getFullYear() + 1, month, day);
 }
 
+/** Get the date of the nth occurrence of a weekday in a month (1=first .. 4=fourth, 5=last). */
+function getNthWeekdayOfMonth(year: number, month: number, weekday: number, occurrence: number): Date {
+  const first = new Date(year, month, 1);
+  const firstWeekday = first.getDay();
+  let offset = weekday - firstWeekday;
+  if (offset < 0) offset += 7;
+  const firstOccurrence = 1 + offset;
+  if (occurrence === 5) {
+    // last occurrence: find last day of month, go back to last occurrence of weekday
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    let d = lastDay;
+    while (new Date(year, month, d).getDay() !== weekday) d--;
+    return new Date(year, month, d);
+  }
+  const day = firstOccurrence + (occurrence - 1) * 7;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  if (day > lastDay) return new Date(year, month, lastDay); // shouldn't happen for 1-4
+  return new Date(year, month, day);
+}
+
 function parseNumberOrWord(s: string): number | null {
   const lower = s.toLowerCase().trim();
   const numMatch = lower.match(/^(\d+)(?:st|nd|rd|th)?$/);
@@ -181,6 +201,23 @@ export function computeNextOccurrence(rule: RecurrenceRule): Date {
       if (thisYear >= today) return thisYear;
       return new Date(today.getFullYear() + 1, rule.month!, rule.day!);
     }
+    case "weekdayOfMonth": {
+      const w = rule.weekday!;
+      const occ = rule.occurrenceInMonth ?? 1;
+      let d = getNthWeekdayOfMonth(today.getFullYear(), today.getMonth(), w, occ);
+      if (d < today) d = getNthWeekdayOfMonth(today.getFullYear(), today.getMonth() + 1, w, occ);
+      return d;
+    }
+    case "intervalMonths": {
+      const anchor = rule.anchorDate ? new Date(rule.anchorDate) : today;
+      if (anchor >= today) return anchor;
+      const months = rule.intervalMonths ?? 1;
+      let next = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+      while (next < today) {
+        next = new Date(next.getFullYear(), next.getMonth() + months, next.getDate());
+      }
+      return next;
+    }
     default:
       return today;
   }
@@ -232,6 +269,17 @@ export function advanceRecurrence(
     }
     case "dayOfYear": {
       next = new Date(current.getFullYear() + 1, rule.month!, rule.day!);
+      break;
+    }
+    case "weekdayOfMonth": {
+      const w = rule.weekday!;
+      const occ = rule.occurrenceInMonth ?? 1;
+      next = getNthWeekdayOfMonth(current.getFullYear(), current.getMonth() + 1, w, occ);
+      break;
+    }
+    case "intervalMonths": {
+      const months = rule.intervalMonths ?? 1;
+      next = new Date(current.getFullYear(), current.getMonth() + months, current.getDate());
       break;
     }
     default:
@@ -286,6 +334,15 @@ export function formatRecurrenceHint(rule: RecurrenceRule, time?: string): strin
     case "dayOfYear":
       desc = `Yearly on ${MONTH_NAMES_SHORT[rule.month!]} ${rule.day}`;
       break;
+    case "weekdayOfMonth": {
+      const occ = rule.occurrenceInMonth ?? 1;
+      const occLabel = occ === 5 ? "last" : ["first", "second", "third", "fourth"][occ - 1];
+      desc = `${occLabel} ${DAY_NAMES_SHORT[rule.weekday!]} of every month`;
+      break;
+    }
+    case "intervalMonths":
+      desc = rule.intervalMonths === 1 ? "Every month" : `Every ${rule.intervalMonths} months`;
+      break;
     default:
       desc = "Recurring";
   }
@@ -310,6 +367,13 @@ export function formatRecurrenceShort(rule: RecurrenceRule): string {
       return `Monthly (${ordinalSuffix(rule.dayOfMonth!)})`;
     case "dayOfYear":
       return `Yearly (${MONTH_NAMES_SHORT[rule.month!]} ${rule.day})`;
+    case "weekdayOfMonth": {
+      const occ = rule.occurrenceInMonth ?? 1;
+      const occLabel = occ === 5 ? "last" : ["first", "second", "third", "fourth"][occ - 1];
+      return `${occLabel} ${DAY_NAMES_SHORT[rule.weekday!]} of month`;
+    }
+    case "intervalMonths":
+      return rule.intervalMonths === 1 ? "Monthly" : `Every ${rule.intervalMonths} months`;
     default:
       return "Recurring";
   }
@@ -577,6 +641,24 @@ function tryMatchDate(input: string): DateMatch | null {
 function tryMatchRecurrence(input: string): RecurrenceMatch | null {
   let m: RegExpMatchArray | null;
 
+  // "first/second/third/fourth/last <weekday> of every month [at TIME]"
+  m = input.match(
+    re(`^(.*?)\\s+(first|second|third|fourth|last)\\s+(${DAY_RE})\\s+of\\s+every\\s+month${TIME_TAIL}\\s*$`),
+  );
+  if (m) {
+    const occWord = m[2].toLowerCase();
+    const occurrenceInMonth = occWord === "last" ? 5 : (ORDINAL_WORDS[occWord as keyof typeof ORDINAL_WORDS] ?? 1);
+    const dayIdx = DAY_MAP[m[3].toLowerCase().substring(0, 3)];
+    const time = m[4] ? parseTime(m[4]) : undefined;
+    if (dayIdx != null && occurrenceInMonth >= 1 && occurrenceInMonth <= 5) {
+      return {
+        prefix: m[1],
+        recurrence: { type: "weekdayOfMonth", weekday: dayIdx, occurrenceInMonth },
+        dueTime: time,
+      };
+    }
+  }
+
   // "on X of every month/year [at TIME]"
   m = input.match(
     re(`^(.*?)\\s+on\\s+(.+?)\\s+of\\s+every\\s+(month|year)${TIME_TAIL}\\s*$`),
@@ -654,6 +736,70 @@ function tryMatchRecurrence(input: string): RecurrenceMatch | null {
       recurrence: { type: "dayOfYear", month: now.getMonth(), day: now.getDate() },
       dueTime: time,
     };
+  }
+
+  // ─ "N months" and "N months starting <date/weekday/in K days|weeks>" ─
+  const monthsM = body.match(re(`^(\\d+)\\s+months?\\s*$`));
+  const monthsStartM = body.match(re(`^(\\d+)\\s+months?\\s+starting\\s+(.+)$`));
+  if (monthsM) {
+    const n = parseInt(monthsM[1], 10);
+    if (n > 0) {
+      const now = new Date();
+      return {
+        prefix,
+        recurrence: { type: "intervalMonths", intervalMonths: n, anchorDate: toDateStr(now) },
+        dueTime: time,
+      };
+    }
+  }
+  if (monthsStartM) {
+    const n = parseInt(monthsStartM[1], 10);
+    const startText = monthsStartM[2].trim().toLowerCase();
+    if (n > 0) {
+      let anchorDate: string;
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      // "in 15 days" / "in 3 weeks"
+      const inDaysM = startText.match(re(`^in\\s+(\\d+)\\s+(days?)$`));
+      const inWeeksM = startText.match(re(`^in\\s+(\\d+)\\s+(weeks?)$`));
+      if (inDaysM) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inDaysM[1], 10));
+        anchorDate = toDateStr(d);
+      } else if (inWeeksM) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inWeeksM[1], 10) * 7);
+        anchorDate = toDateStr(d);
+      } else {
+        const dayIdx = DAY_MAP[startText.substring(0, 3)];
+        if (dayIdx != null) {
+          anchorDate = toDateStr(nextWeekday(dayIdx));
+        } else {
+          const dayMonthM = startText.match(re(`^(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})$`));
+          const monthDayM = startText.match(re(`^(${MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?$`));
+          if (dayMonthM) {
+            const day = parseInt(dayMonthM[1], 10);
+            const mi = MONTH_MAP[dayMonthM[2].substring(0, 3)];
+            if (mi != null && day >= 1 && day <= 31)
+              anchorDate = toDateStr(nextMonthDay(mi, day));
+            else
+              anchorDate = toDateStr(today);
+          } else if (monthDayM) {
+            const mi = MONTH_MAP[monthDayM[1].substring(0, 3)];
+            const day = parseInt(monthDayM[2], 10);
+            if (mi != null && day >= 1 && day <= 31)
+              anchorDate = toDateStr(nextMonthDay(mi, day));
+            else
+              anchorDate = toDateStr(today);
+          } else {
+            anchorDate = toDateStr(today);
+          }
+        }
+      }
+      return {
+        prefix,
+        recurrence: { type: "intervalMonths", intervalMonths: n, anchorDate },
+        dueTime: time,
+      };
+    }
   }
 
   // ─ "N days/weeks" ─

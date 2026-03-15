@@ -9,7 +9,7 @@ export type Reminder =
   | { type: "before"; minutes: number };
 
 export interface RecurrenceRule {
-  type: "weekdays" | "interval" | "dayOfMonth" | "dayOfYear";
+  type: "weekdays" | "interval" | "dayOfMonth" | "dayOfYear" | "weekdayOfMonth" | "intervalMonths";
   /** Day-of-week indices (0 = Sun … 6 = Sat). Used when type = 'weekdays'. */
   weekdays?: number[];
   /** Repeat every N days. Used when type = 'interval'. */
@@ -22,6 +22,14 @@ export interface RecurrenceRule {
   day?: number;
   /** When the interval was derived from "every Nth <weekday>", stores the weekday for display. */
   anchorWeekday?: number;
+  /** Day-of-week (0–6). Used when type = 'weekdayOfMonth' (e.g. first Saturday of every month). */
+  weekday?: number;
+  /** 1=first, 2=second, 3=third, 4=fourth, 5=last. Used when type = 'weekdayOfMonth'. */
+  occurrenceInMonth?: number;
+  /** Repeat every N months. Used when type = 'intervalMonths'. */
+  intervalMonths?: number;
+  /** First occurrence date (YYYY-MM-DD). Used when type = 'intervalMonths'. */
+  anchorDate?: string;
 }
 
 export interface Task {

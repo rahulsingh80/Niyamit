@@ -671,6 +671,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         return recDayOfMonth < 1 || recDayOfMonth > 31 ? undefined : { type: "dayOfMonth", dayOfMonth: recDayOfMonth };
       case "dayOfYear":
         return recDay < 1 || recDay > 31 ? undefined : { type: "dayOfYear", month: recMonth, day: recDay };
+      case "weekdayOfMonth":
+      case "intervalMonths":
+        return editingTask?.recurrence?.type === recType ? editingTask.recurrence : undefined;
       default:
         return undefined;
     }
@@ -940,6 +943,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 <option value="interval">Every X days</option>
                 <option value="dayOfMonth">Day of month</option>
                 <option value="dayOfYear">Day of year</option>
+                <option value="weekdayOfMonth">First/weekday of month</option>
+                <option value="intervalMonths">Every N months</option>
               </select>
             </div>
             {recType === "weekdays" && (
