@@ -18,6 +18,7 @@ import { TaskList } from "@components/TaskList";
 import { BulkActionBar } from "@components/BulkActionBar";
 import { NEW_PROJECT_PREFIX } from "@components/ProjectSelect";
 import { RemindersSection } from "@components/RemindersSection";
+import { HelpPage } from "@components/HelpPage";
 import "./styles.css";
 
 const TOKEN_KEY = "niyamit_google_token";
@@ -81,6 +82,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set());
   const [showBulkCheckboxes, setShowBulkCheckboxes] = useState(false);
   const [isBulkBarClosing, setIsBulkBarClosing] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const bulkBarClosingIdsRef = useRef<string[]>([]);
   const bulkBarCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -726,6 +728,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           <button type="button" className="secondary" onClick={handleSyncButtonClick} disabled={isSyncing}>
             {isSyncing ? "Syncing\u2026" : "Sync to Drive"}
           </button>
+          <button type="button" className="secondary" onClick={() => setShowHelp(true)}>Help</button>
           <span className={`sync-status ${isSyncing ? "active" : ""} ${syncError ? "warning" : hasPendingChanges ? "" : "success"}`}>
             <span className="sync-dot" aria-hidden="true" />
             {syncStatusLabel}
@@ -769,6 +772,9 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
         </div>
       )}
 
+      {showHelp ? (
+        <HelpPage onClose={() => setShowHelp(false)} />
+      ) : (
       <main className={`app-main layout-sidebar${isFormOpen ? " form-open" : ""}`}>
         {dueReminders.length > 0 && (
           <RemindersSection
@@ -859,6 +865,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           />
         </div>
       </main>
+      )}
 
       <footer className="app-footer">
         <small>Data is currently stored in your browser&apos;s local storage. You can manually sync JSON files to your Google Drive.</small>

@@ -1633,3 +1633,77 @@ button {
 .task-item[draggable="true"]:active {
   cursor: grabbing;
 }
+
+/* ── Help page ─────────────────────────────────────────── */
+
+.help-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+}
+
+.help-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.help-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.help-content section {
+  margin-bottom: 2rem;
+}
+
+.help-content section:last-child {
+  margin-bottom: 2.5rem;
+}
+
+.help-content h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+  color: #0d1220;
+}
+
+.help-content h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.help-content p,
+.help-content ul {
+  margin: 0 0 0.5rem;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.help-content ul {
+  padding-left: 1.5rem;
+}
+
+.help-content li {
+  margin-bottom: 0.35rem;
+}
+
+.help-content code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  background: #eef1f5;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+}
