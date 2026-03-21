@@ -669,6 +669,45 @@ function tryMatchDate(input: string): DateMatch | null {
   return null;
 }
 
+/** Anchor date (YYYY-MM-DD) for "starting …" in recurring phrases (months, day intervals). */
+function parseRecurrenceStartingAnchor(startTextRaw: string): string {
+  const startText = startTextRaw.trim().toLowerCase();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (/^(today|tod)$/.test(startText)) return toDateStr(today);
+  if (/^(tomorrow|tom)$/.test(startText)) {
+    return toDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
+  }
+
+  const inDaysM = startText.match(/^in\s+(\d+)\s+days?$/);
+  const inWeeksM = startText.match(/^in\s+(\d+)\s+weeks?$/);
+  if (inDaysM) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inDaysM[1], 10));
+    return toDateStr(d);
+  }
+  if (inWeeksM) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inWeeksM[1], 10) * 7);
+    return toDateStr(d);
+  }
+
+  const dayIdx = DAY_MAP[startText.substring(0, 3)];
+  if (dayIdx != null) return toDateStr(nextWeekday(dayIdx));
+
+  const dayMonthM = startText.match(re(`^(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})$`));
+  const monthDayM = startText.match(re(`^(${MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?$`));
+  if (dayMonthM) {
+    const day = parseInt(dayMonthM[1], 10);
+    const mi = MONTH_MAP[dayMonthM[2].substring(0, 3)];
+    if (mi != null && day >= 1 && day <= 31) return toDateStr(nextMonthDay(mi, day));
+  } else if (monthDayM) {
+    const mi = MONTH_MAP[monthDayM[1].substring(0, 3)];
+    const day = parseInt(monthDayM[2], 10);
+    if (mi != null && day >= 1 && day <= 31) return toDateStr(nextMonthDay(mi, day));
+  }
+  return toDateStr(today);
+}
+
 // ── Recurrence matcher ──────────────────────────────────
 
 function tryMatchRecurrence(input: string): RecurrenceMatch | null {
@@ -787,46 +826,8 @@ function tryMatchRecurrence(input: string): RecurrenceMatch | null {
   }
   if (monthsStartM) {
     const n = parseInt(monthsStartM[1], 10);
-    const startText = monthsStartM[2].trim().toLowerCase();
     if (n > 0) {
-      let anchorDate: string;
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      // "in 15 days" / "in 3 weeks"
-      const inDaysM = startText.match(re(`^in\\s+(\\d+)\\s+(days?)$`));
-      const inWeeksM = startText.match(re(`^in\\s+(\\d+)\\s+(weeks?)$`));
-      if (inDaysM) {
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inDaysM[1], 10));
-        anchorDate = toDateStr(d);
-      } else if (inWeeksM) {
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + parseInt(inWeeksM[1], 10) * 7);
-        anchorDate = toDateStr(d);
-      } else {
-        const dayIdx = DAY_MAP[startText.substring(0, 3)];
-        if (dayIdx != null) {
-          anchorDate = toDateStr(nextWeekday(dayIdx));
-        } else {
-          const dayMonthM = startText.match(re(`^(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})$`));
-          const monthDayM = startText.match(re(`^(${MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?$`));
-          if (dayMonthM) {
-            const day = parseInt(dayMonthM[1], 10);
-            const mi = MONTH_MAP[dayMonthM[2].substring(0, 3)];
-            if (mi != null && day >= 1 && day <= 31)
-              anchorDate = toDateStr(nextMonthDay(mi, day));
-            else
-              anchorDate = toDateStr(today);
-          } else if (monthDayM) {
-            const mi = MONTH_MAP[monthDayM[1].substring(0, 3)];
-            const day = parseInt(monthDayM[2], 10);
-            if (mi != null && day >= 1 && day <= 31)
-              anchorDate = toDateStr(nextMonthDay(mi, day));
-            else
-              anchorDate = toDateStr(today);
-          } else {
-            anchorDate = toDateStr(today);
-          }
-        }
-      }
+      const anchorDate = parseRecurrenceStartingAnchor(monthsStartM[2]);
       return {
         prefix,
         recurrence: { type: "intervalMonths", intervalMonths: n, anchorDate },
@@ -844,6 +845,25 @@ function tryMatchRecurrence(input: string): RecurrenceMatch | null {
       return {
         prefix,
         recurrence: { type: "interval", intervalDays: unit === "week" ? n * 7 : n },
+        dueTime: time,
+      };
+    }
+  }
+
+  // ─ "N days/weeks starting …" (anchor first occurrence) ─
+  const intervalStartM = body.match(re(`^(\\d+)\\s+(days?|weeks?)\\s+starting\\s+(.+)$`));
+  if (intervalStartM) {
+    const n = parseInt(intervalStartM[1], 10);
+    const unit = intervalStartM[2].toLowerCase().replace(/s$/, "");
+    if (n > 0) {
+      const anchorDate = parseRecurrenceStartingAnchor(intervalStartM[3]);
+      return {
+        prefix,
+        recurrence: {
+          type: "interval",
+          intervalDays: unit === "week" ? n * 7 : n,
+          anchorDate,
+        },
         dueTime: time,
       };
     }
