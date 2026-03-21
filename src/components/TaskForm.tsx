@@ -535,8 +535,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       finalRecurrence = parsed.recurrence;
     } else if (whenMode === "recurring") {
       finalRecurrence = buildRecurrenceFromForm();
+      // Next due for recurring tasks is stored in dueDate; the When UI does not
+      // always expose a date for recurrence. computeNextOccurrence() does not
+      // receive that date—for "every N days" without anchorDate it returns today,
+      // which would clobber the real next occurrence on every save.
       finalDate = finalRecurrence
-        ? toDateStr(computeNextOccurrence(finalRecurrence))
+        ? dueDate
+          ? dueDate
+          : toDateStr(computeNextOccurrence(finalRecurrence))
         : null;
     } else {
       finalDate = dueDate || null;
