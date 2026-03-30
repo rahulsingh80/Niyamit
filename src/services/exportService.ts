@@ -1,6 +1,23 @@
 import type { Task } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
-import { toSerialized } from "@services/localStorageService";
+import { fromSerialized, toSerialized, type AppData } from "@services/localStorageService";
+
+export type ImportJsonResult =
+  | { ok: true; data: AppData }
+  | { ok: false; error: "invalid_json" | "invalid_format" };
+
+/** Parse JSON text from a backup file. Same shape as {@link exportDataAsJson} output or legacy tasks/projects. */
+export function parseImportedAppDataJson(raw: string): ImportJsonResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "invalid_json" };
+  }
+  const data = fromSerialized(parsed);
+  if (!data) return { ok: false, error: "invalid_format" };
+  return { ok: true, data };
+}
 
 function formatExportTimestamp(): string {
   const d = new Date();

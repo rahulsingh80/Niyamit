@@ -173,7 +173,8 @@ export const HelpPage: React.FC<HelpPageProps> = ({ onClose }) => {
         <section>
           <h2>Export and backup</h2>
           <p>
-            <strong>Export as JSON</strong> in the header downloads a JSON file of your tasks (and projects) for backup. Data is also stored in your browser&apos;s local storage and, when connected, in Google Drive.
+            <strong>Export as JSON</strong> in the header downloads a JSON file of your tasks (and projects) for backup.
+            <strong> Import JSON</strong> replaces local data with a chosen file if it matches the export format (invalid files are rejected and nothing changes). Data is also stored in your browser&apos;s local storage and, when connected, in Google Drive.
           </p>
         </section>
 

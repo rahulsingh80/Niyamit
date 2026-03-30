@@ -5,7 +5,7 @@ import type { Project } from "@domain/projectTypes";
 import { getDescendantIds } from "@domain/projectTypes";
 import { advanceRecurrence } from "@domain/dateParser";
 import { loadAppData, saveAppData, type AppData } from "@services/localStorageService";
-import { exportDataAsJson } from "@services/exportService";
+import { exportDataAsJson, parseImportedAppDataJson } from "@services/exportService";
 import {
   downloadAppDataFromDrive,
   getOrCreateDataFileId,
@@ -85,6 +85,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const [showHelp, setShowHelp] = useState(false);
   const bulkBarClosingIdsRef = useRef<string[]>([]);
   const bulkBarCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const [undoStack, setUndoStack] = useState<AppData[]>([]);
   const [redoStack, setRedoStack] = useState<AppData[]>([]);
@@ -650,6 +651,59 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   }
 
   function handleExport() { exportDataAsJson(tasks, projects); }
+
+  function handleImportClick() {
+    importFileInputRef.current?.click();
+  }
+
+  async function handleImportFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      window.alert("Could not read the selected file.");
+      return;
+    }
+
+    const result = parseImportedAppDataJson(text);
+    if (!result.ok) {
+      window.alert(
+        result.error === "invalid_json"
+          ? "This file is not valid JSON. Your data was not changed."
+          : "This file is not a valid Niyamit backup. Use a file exported from Niyamit (or the expected tasks/projects shape). Your data was not changed.",
+      );
+      return;
+    }
+
+    const { tasks: nextTasks, projects: nextProjects } = result.data;
+    pushUndo();
+    setConflictState(null);
+    setSelectedTaskIds(new Set());
+    applyLocalChange(nextTasks, nextProjects);
+
+    setSelectedProjectId((prev) => {
+      if (!prev) return prev;
+      return nextProjects.some((p) => p.id === prev && !p.deleted) ? prev : null;
+    });
+    setSelectedTag((prev) => {
+      if (!prev) return prev;
+      return nextTasks.some((t) => !t.deleted && t.tags?.includes(prev)) ? prev : null;
+    });
+
+    const editing = editingTask;
+    if (editing) {
+      const stillEditing = nextTasks.find((t) => t.id === editing.id && !t.completed && !t.deleted);
+      if (stillEditing) setEditingTask(stillEditing);
+      else {
+        setEditingTask(null);
+        setIsFormOpen(false);
+      }
+    }
+  }
   function handleSyncButtonClick() {
     const token = getValidToken();
     if (token) { void runSync("manual", token); return; }
@@ -720,10 +774,19 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           <p className="subtitle">Offline-first tasks. JSON-backed. Google Drive sync ready.</p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: "none" }}
+            aria-hidden="true"
+            onChange={(ev) => void handleImportFileSelected(ev)}
+          />
           <div className="undo-redo-group">
             <button type="button" className="icon-btn" onClick={handleUndo} disabled={undoStack.length === 0} aria-label="Undo" title="Undo">↩</button>
             <button type="button" className="icon-btn" onClick={handleRedo} disabled={redoStack.length === 0} aria-label="Redo" title="Redo">↪</button>
           </div>
+          <button type="button" className="secondary" onClick={handleImportClick}>Import JSON</button>
           <button type="button" className="secondary" onClick={handleExport}>Export as JSON</button>
           <button type="button" className="secondary" onClick={handleSyncButtonClick} disabled={isSyncing}>
             {isSyncing ? "Syncing\u2026" : "Sync to Drive"}
