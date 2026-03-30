@@ -763,7 +763,15 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
     ? projects.find((p) => p.id === selectedProjectId && !p.deleted) ?? null
     : null;
 
-  const syncStatusLabel = isSyncing ? "Syncing" : syncError ? "Sync error" : hasPendingChanges ? "Sync pending" : "Synced";
+  const syncStatusVariant = isSyncing ? "syncing" : syncError ? "error" : hasPendingChanges ? "pending" : "synced";
+  const syncStatusAriaLabel =
+    syncStatusVariant === "syncing"
+      ? "Syncing"
+      : syncStatusVariant === "error"
+        ? "Sync error"
+        : syncStatusVariant === "pending"
+          ? "Sync pending"
+          : "Synced";
 
   // ── Render ────────────────────────────────────────────
   return (
@@ -792,9 +800,13 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
             {isSyncing ? "Syncing\u2026" : "Sync to Drive"}
           </button>
           <button type="button" className="secondary" onClick={() => setShowHelp(true)}>Help</button>
-          <span className={`sync-status ${isSyncing ? "active" : ""} ${syncError ? "warning" : hasPendingChanges ? "" : "success"}`}>
+          <span
+            className={`sync-status sync-status--${syncStatusVariant}`}
+            role="status"
+            aria-live="polite"
+            aria-label={syncStatusAriaLabel}
+          >
             <span className="sync-dot" aria-hidden="true" />
-            {syncStatusLabel}
           </span>
         </div>
       </header>

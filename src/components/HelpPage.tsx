@@ -165,7 +165,9 @@ export const HelpPage: React.FC<HelpPageProps> = ({ onClose }) => {
           <ul>
             <li>Click <strong>Sync to Drive</strong> to sign in with Google (OAuth). The app uses the <code>drive.file</code> scope and keeps task JSON in a folder named <strong>Niyamit</strong> in your Drive.</li>
             <li>Sync is <strong>batched</strong>: after you stop interacting for 15 seconds, changes are synced. While idle, sync runs every minute. If you make changes during a sync, they are merged when the sync finishes; if automatic merge isn&apos;t possible, you get a <strong>conflict</strong> dialog to choose local or Drive version per task.</li>
-            <li>Status next to the button: <strong>Synced</strong>, <strong>Sync pending</strong> (local changes not yet synced), <strong>Syncing</strong>, or <strong>Sync error</strong>.</li>
+            <li>
+              A <strong>colored dot</strong> next to Help shows sync state: <strong>green</strong> (synced), <strong>orange</strong> blinking slowly (sync pending), <strong>yellow</strong> blinking (syncing), or <strong>red</strong> blinking (sync error).
+            </li>
             <li>If you try to close the tab or browser while sync has failed or is pending, you&apos;ll get a warning and can cancel to sync first.</li>
           </ul>
         </section>

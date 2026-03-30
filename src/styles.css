@@ -122,43 +122,40 @@ body {
 /* ── Sync status & error banner ──────────────────────── */
 
 .sync-status {
-  font-size: 0.82rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  color: #5c6370;
+  justify-content: center;
+  line-height: 0;
 }
 
 .sync-status .sync-dot {
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 9999px;
-  background: #7d8592;
+  flex-shrink: 0;
 }
 
-.sync-status.active {
-  color: #4a6582;
+/* Green, steady — synced */
+.sync-status--synced .sync-dot {
+  background: #16a34a;
 }
 
-.sync-status.active .sync-dot {
-  background: #6e8fa8;
-  animation: sync-pulse 1.4s ease-in-out infinite;
+/* Orange, slower periodic blink — pending */
+.sync-status--pending .sync-dot {
+  background: #ea580c;
+  animation: sync-dot-blink-slow 2.4s ease-in-out infinite;
 }
 
-.sync-status.success {
-  color: #4a684a;
+/* Yellow, blinking — syncing */
+.sync-status--syncing .sync-dot {
+  background: #ca8a04;
+  animation: sync-dot-blink-fast 0.85s ease-in-out infinite;
 }
 
-.sync-status.success .sync-dot {
-  background: #6d9a6d;
-}
-
-.sync-status.warning {
-  color: #804848;
-}
-
-.sync-status.warning .sync-dot {
-  background: #b07878;
+/* Red, blinking — error */
+.sync-status--error .sync-dot {
+  background: #dc2626;
+  animation: sync-dot-blink-fast 0.85s ease-in-out infinite;
 }
 
 .sync-error-banner {
@@ -255,10 +252,28 @@ body {
   gap: 0.5rem;
 }
 
-@keyframes sync-pulse {
-  0% { opacity: 0.5; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.05); }
-  100% { opacity: 0.5; transform: scale(0.95); }
+@keyframes sync-dot-blink-fast {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.22;
+  }
+}
+
+@keyframes sync-dot-blink-slow {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.22;
+  }
+  95%,
+  100% {
+    opacity: 1;
+  }
 }
 
 /* ── Footer ──────────────────────────────────────────── */
