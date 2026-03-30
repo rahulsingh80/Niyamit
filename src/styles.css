@@ -523,6 +523,22 @@ button {
   background: #d4e4d4;
 }
 
+.sync-drive-btn {
+  display: inline-grid;
+  place-items: center;
+}
+
+.sync-drive-btn__measure {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sync-drive-btn__label {
+  grid-area: 1 / 1;
+}
+
 /* ── Date-grouped task list ──────────────────────────── */
 
 .task-list-container {

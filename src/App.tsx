@@ -796,8 +796,11 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           </div>
           <button type="button" className="secondary" onClick={handleImportClick}>Import JSON</button>
           <button type="button" className="secondary" onClick={handleExport}>Export as JSON</button>
-          <button type="button" className="secondary" onClick={handleSyncButtonClick} disabled={isSyncing}>
-            {isSyncing ? "Syncing\u2026" : "Sync to Drive"}
+          <button type="button" className="secondary sync-drive-btn" onClick={handleSyncButtonClick} disabled={isSyncing}>
+            <span className="sync-drive-btn__measure" aria-hidden>
+              Sync to Drive
+            </span>
+            <span className="sync-drive-btn__label">{isSyncing ? "Syncing\u2026" : "Sync to Drive"}</span>
           </button>
           <button type="button" className="secondary" onClick={() => setShowHelp(true)}>Help</button>
           <span
