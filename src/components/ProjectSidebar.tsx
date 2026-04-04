@@ -12,6 +12,8 @@ interface ProjectSidebarProps {
   editingTask: Task | null;
   allProjects: Project[];
   allTags: string[];
+  /** When true, Projects and Tags start collapsed (e.g. narrow phone layout). */
+  collapseProjectsAndTagsByDefault?: boolean;
 
   onSelectProject(id: string | null): void;
   onSelectTag(tag: string | null): void;
@@ -39,6 +41,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   editingTask,
   allProjects,
   allTags,
+  collapseProjectsAndTagsByDefault = false,
 
   onSelectProject,
   onSelectTag,
@@ -60,8 +63,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [nameError, setNameError] = useState("");
-  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
-  const [tagsCollapsed, setTagsCollapsed] = useState(false);
+  const [projectsCollapsed, setProjectsCollapsed] = useState(collapseProjectsAndTagsByDefault);
+  const [tagsCollapsed, setTagsCollapsed] = useState(collapseProjectsAndTagsByDefault);
   const [tagCtxMenu, setTagCtxMenu] = useState<{ x: number; y: number; tag: string } | null>(null);
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [tagEditValue, setTagEditValue] = useState("");

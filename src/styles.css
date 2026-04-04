@@ -37,6 +37,40 @@ body {
   flex-wrap: wrap;
 }
 
+.app-header__title-block {
+  min-width: 0;
+}
+
+.app-header__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.app-header__help-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* Narrow phone layout: keep max-width in sync with useNarrowPhoneLayout (640px). */
+@media (max-width: 640px) {
+  .app-root {
+    padding: 1.25rem 1rem 2rem;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-header__toolbar {
+    width: 100%;
+  }
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 1.75rem;
@@ -537,6 +571,45 @@ button {
 
 .sync-drive-btn__label {
   grid-area: 1 / 1;
+}
+
+.header-json-menu {
+  position: relative;
+}
+
+.header-json-menu__panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+  min-width: 11rem;
+  padding: 0.25rem;
+  background: #fff;
+  border: 1px solid #a8c8a8;
+  border-radius: 0.45rem;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.header-json-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: #2d3548;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.header-json-menu__item:hover {
+  background: #e8f0e8;
 }
 
 /* ── Date-grouped task list ──────────────────────────── */

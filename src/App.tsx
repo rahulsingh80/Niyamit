@@ -19,6 +19,7 @@ import { BulkActionBar } from "@components/BulkActionBar";
 import { NEW_PROJECT_PREFIX } from "@components/ProjectSelect";
 import { RemindersSection } from "@components/RemindersSection";
 import { HelpPage } from "@components/HelpPage";
+import { useNarrowPhoneLayout } from "./hooks/useNarrowPhoneLayout";
 import "./styles.css";
 
 const TOKEN_KEY = "niyamit_google_token";
@@ -86,6 +87,10 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const bulkBarClosingIdsRef = useRef<string[]>([]);
   const bulkBarCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const importFileInputRef = useRef<HTMLInputElement>(null);
+  const jsonMenuRef = useRef<HTMLDivElement>(null);
+
+  const isNarrowPhone = useNarrowPhoneLayout();
+  const [jsonMenuOpen, setJsonMenuOpen] = useState(false);
 
   const [undoStack, setUndoStack] = useState<AppData[]>([]);
   const [redoStack, setRedoStack] = useState<AppData[]>([]);
@@ -108,6 +113,21 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { conflictStateRef.current = conflictState; }, [conflictState]);
+
+  useEffect(() => {
+    if (!jsonMenuOpen) return;
+    function handlePointerDown(e: MouseEvent | TouchEvent) {
+      if (jsonMenuRef.current && !jsonMenuRef.current.contains(e.target as Node)) {
+        setJsonMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [jsonMenuOpen]);
 
   // Keep last selected ids for bulk bar close animation
   useEffect(() => {
@@ -777,11 +797,11 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   return (
     <div className="app-root">
       <header className="app-header">
-        <div>
+        <div className="app-header__title-block">
           <h1>Niyamit</h1>
           <p className="subtitle">Offline-first tasks. JSON-backed. Google Drive sync ready.</p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div className="app-header__toolbar">
           <input
             ref={importFileInputRef}
             type="file"
@@ -794,23 +814,76 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
             <button type="button" className="icon-btn" onClick={handleUndo} disabled={undoStack.length === 0} aria-label="Undo" title="Undo">↩</button>
             <button type="button" className="icon-btn" onClick={handleRedo} disabled={redoStack.length === 0} aria-label="Redo" title="Redo">↪</button>
           </div>
-          <button type="button" className="secondary" onClick={handleImportClick}>Import JSON</button>
-          <button type="button" className="secondary" onClick={handleExport}>Export as JSON</button>
+          {isNarrowPhone ? (
+            <div className="header-json-menu" ref={jsonMenuRef}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setJsonMenuOpen((o) => !o)}
+                aria-expanded={jsonMenuOpen}
+                aria-haspopup="menu"
+                aria-controls="header-json-menu-panel"
+              >
+                JSON
+              </button>
+              {jsonMenuOpen ? (
+                <div id="header-json-menu-panel" className="header-json-menu__panel" role="menu">
+                  <button
+                    type="button"
+                    className="header-json-menu__item"
+                    role="menuitem"
+                    onClick={() => {
+                      setJsonMenuOpen(false);
+                      handleImportClick();
+                    }}
+                  >
+                    Import JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="header-json-menu__item"
+                    role="menuitem"
+                    onClick={() => {
+                      setJsonMenuOpen(false);
+                      handleExport();
+                    }}
+                  >
+                    Export as JSON
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <button type="button" className="secondary" onClick={handleImportClick}>Import JSON</button>
+              <button type="button" className="secondary" onClick={handleExport}>Export as JSON</button>
+            </>
+          )}
           <button type="button" className="secondary sync-drive-btn" onClick={handleSyncButtonClick} disabled={isSyncing}>
             <span className="sync-drive-btn__measure" aria-hidden>
-              Sync to Drive
+              {isNarrowPhone ? "Drive" : "Sync to Drive"}
             </span>
-            <span className="sync-drive-btn__label">{isSyncing ? "Syncing\u2026" : "Sync to Drive"}</span>
+            <span className="sync-drive-btn__label">
+              {isNarrowPhone
+                ? isSyncing
+                  ? "\u2026"
+                  : "Drive"
+                : isSyncing
+                  ? "Syncing\u2026"
+                  : "Sync to Drive"}
+            </span>
           </button>
-          <button type="button" className="secondary" onClick={() => setShowHelp(true)}>Help</button>
-          <span
-            className={`sync-status sync-status--${syncStatusVariant}`}
-            role="status"
-            aria-live="polite"
-            aria-label={syncStatusAriaLabel}
-          >
-            <span className="sync-dot" aria-hidden="true" />
-          </span>
+          <div className="app-header__help-sync">
+            <button type="button" className="secondary" onClick={() => setShowHelp(true)}>Help</button>
+            <span
+              className={`sync-status sync-status--${syncStatusVariant}`}
+              role="status"
+              aria-live="polite"
+              aria-label={syncStatusAriaLabel}
+            >
+              <span className="sync-dot" aria-hidden="true" />
+            </span>
+          </div>
         </div>
       </header>
 
@@ -869,6 +942,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
           allTags={allTags}
           isFormOpen={isFormOpen}
           editingTask={editingTask}
+          collapseProjectsAndTagsByDefault={isNarrowPhone}
           onSelectProject={(id) => {
             setSelectedProjectId(id);
             setSelectedTag(null);
