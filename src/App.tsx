@@ -93,6 +93,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
 
   const isNarrowPhone = useNarrowPhoneLayout();
   const [jsonMenuOpen, setJsonMenuOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   const [undoStack, setUndoStack] = useState<AppData[]>([]);
   const [redoStack, setRedoStack] = useState<AppData[]>([]);
@@ -164,6 +165,15 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
       root.style.removeProperty("--app-sticky-bulk-offset");
     };
   }, [selectedTaskIds.size, isBulkBarClosing]);
+
+  useEffect(() => {
+    function onScroll() {
+      setShowBackToTop(window.scrollY > 280);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     if (!jsonMenuOpen) return;
@@ -1076,6 +1086,20 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
       <footer className="app-footer">
         <small>Data is currently stored in your browser&apos;s local storage. You can manually sync JSON files to your Google Drive.</small>
       </footer>
+
+      {showBackToTop ? (
+        <button
+          type="button"
+          className="back-to-top"
+          onClick={() => {
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+          }}
+          aria-label="Back to top"
+        >
+          Back to top
+        </button>
+      ) : null}
     </div>
   );
 };

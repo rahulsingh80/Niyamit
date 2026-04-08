@@ -367,6 +367,26 @@ body {
   color: #7d8592;
 }
 
+.back-to-top {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px) + 0.5rem);
+  bottom: max(1.25rem, env(safe-area-inset-bottom, 0px) + 0.75rem);
+  z-index: 35;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid #a8c8a8;
+  background: #e2ede2;
+  color: #4a684a;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.back-to-top:hover {
+  background: #d4e4d4;
+}
+
 /* ── Card ────────────────────────────────────────────── */
 
 .card {
