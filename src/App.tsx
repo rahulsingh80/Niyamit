@@ -89,6 +89,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const jsonMenuRef = useRef<HTMLDivElement>(null);
   const appHeaderStickyRef = useRef<HTMLDivElement>(null);
+  const bulkBarStickyRef = useRef<HTMLDivElement>(null);
 
   const isNarrowPhone = useNarrowPhoneLayout();
   const [jsonMenuOpen, setJsonMenuOpen] = useState(false);
@@ -139,6 +140,30 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
       root.style.removeProperty("--app-sticky-header-offset");
     };
   }, [isNarrowPhone]);
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    function apply() {
+      const node = bulkBarStickyRef.current;
+      if (!node) {
+        root.style.setProperty("--app-sticky-bulk-offset", "0px");
+        return;
+      }
+      const h = Math.ceil(node.getBoundingClientRect().height);
+      root.style.setProperty("--app-sticky-bulk-offset", h <= 1 ? "0px" : `${h}px`);
+    }
+    apply();
+    const el = bulkBarStickyRef.current;
+    if (!el) {
+      return () => root.style.removeProperty("--app-sticky-bulk-offset");
+    }
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--app-sticky-bulk-offset");
+    };
+  }, [selectedTaskIds.size, isBulkBarClosing]);
 
   useEffect(() => {
     if (!jsonMenuOpen) return;
@@ -1009,7 +1034,10 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
               </span>
             </div>
           )}
-          <div className={`bulk-action-bar-wrapper${selectedTaskIds.size > 0 ? " is-open" : ""}`}>
+          <div
+            ref={bulkBarStickyRef}
+            className={`bulk-action-bar-wrapper${selectedTaskIds.size > 0 ? " is-open" : ""}`}
+          >
             {(selectedTaskIds.size > 0 || isBulkBarClosing) && (
               <BulkActionBar
                 selectedTaskIds={selectedTaskIds.size > 0 ? Array.from(selectedTaskIds) : bulkBarClosingIdsRef.current}

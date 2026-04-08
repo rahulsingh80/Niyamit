@@ -672,9 +672,15 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding-bottom: 0.45rem;
-  border-bottom: 2px solid #d4d8de;
+  padding: 0.2rem 0 0.45rem;
   margin-bottom: 0.25rem;
+  border-bottom: 2px solid #d4d8de;
+  position: sticky;
+  /* Below main toolbar + optional bulk bar (see App.tsx) */
+  top: calc(var(--app-sticky-header-offset, 0px) + var(--app-sticky-bulk-offset, 0px));
+  z-index: 12;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 .date-label {
