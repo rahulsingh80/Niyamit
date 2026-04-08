@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import type { Task, TaskPriority } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
@@ -88,6 +88,7 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   const bulkBarCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const jsonMenuRef = useRef<HTMLDivElement>(null);
+  const appHeaderStickyRef = useRef<HTMLDivElement>(null);
 
   const isNarrowPhone = useNarrowPhoneLayout();
   const [jsonMenuOpen, setJsonMenuOpen] = useState(false);
@@ -113,6 +114,31 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { conflictStateRef.current = conflictState; }, [conflictState]);
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (isNarrowPhone) {
+      root.style.removeProperty("--app-sticky-header-offset");
+      return;
+    }
+    const el = appHeaderStickyRef.current;
+    if (!el) return;
+    function apply() {
+      const h = appHeaderStickyRef.current;
+      if (!h) return;
+      /* Prefer subpixel-accurate height (offsetHeight rounds to int) so sticky bulk bar
+         clears the painted toolbar; Math.ceil avoids understating when DPR rounds down. */
+      const px = Math.ceil(h.getBoundingClientRect().height);
+      root.style.setProperty("--app-sticky-header-offset", `${px}px`);
+    }
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--app-sticky-header-offset");
+    };
+  }, [isNarrowPhone]);
 
   useEffect(() => {
     if (!jsonMenuOpen) return;
@@ -796,12 +822,11 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
   // ── Render ────────────────────────────────────────────
   return (
     <div className="app-root">
-      <header className="app-header">
-        <div className="app-header__title-block">
-          <h1>Niyamit</h1>
-          <p className="subtitle">Offline-first tasks. JSON-backed. Google Drive sync ready.</p>
-        </div>
-        <div className="app-header__toolbar">
+      <div className="app-header__sticky-row" ref={appHeaderStickyRef} role="banner">
+          <div className="app-header__title-block">
+            <h1>Niyamit</h1>
+          </div>
+          <div className="app-header__toolbar">
           <input
             ref={importFileInputRef}
             type="file"
@@ -885,7 +910,8 @@ export const App: React.FC<{ initialTasks?: Task[] }> = ({ initialTasks }) => {
             </span>
           </div>
         </div>
-      </header>
+        </div>
+      <p className="subtitle app-header__tagline">Offline-first tasks. JSON-backed. Google Drive sync ready.</p>
 
       {syncError && (
         <div className="sync-error-banner">
