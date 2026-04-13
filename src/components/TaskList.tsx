@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
 import type { Task } from "@domain/taskTypes";
 import type { Project } from "@domain/projectTypes";
 import { groupTasksByDate } from "@domain/taskSort";
@@ -66,6 +66,50 @@ function isDroppableGroup(
   return getTargetDateFromGroupKey(group.key, todayStr, tomorrowStr) !== null;
 }
 
+/** Matches `.date-group-heading` sticky `top` (header + optional bulk bar). */
+function readStickyTopPx(): number {
+  const root = document.documentElement;
+  const parsePx = (raw: string) => {
+    const s = raw.trim() || "0px";
+    const m = /^([\d.]+)px$/.exec(s);
+    return m ? parseFloat(m[1]) : 0;
+  };
+  return (
+    parsePx(getComputedStyle(root).getPropertyValue("--app-sticky-header-offset")) +
+    parsePx(getComputedStyle(root).getPropertyValue("--app-sticky-bulk-offset"))
+  );
+}
+
+const STICKY_TOP_MATCH_TOL = 4;
+
+/**
+ * Which date-group heading row is currently docked at the sticky offset (same row that shows
+ * the section label at the top while scrolling).
+ */
+function findStickyBulkHeadingIndex(
+  orderedKeys: string[],
+  getHeadingEl: (key: string) => HTMLElement | null,
+): number {
+  if (orderedKeys.length === 0) return 0;
+  const stickyTop = readStickyTopPx();
+  const tops = orderedKeys.map((k) => {
+    const el = getHeadingEl(k);
+    return el ? el.getBoundingClientRect().top : Number.NaN;
+  });
+
+  for (let i = orderedKeys.length - 1; i >= 0; i--) {
+    const t = tops[i];
+    if (!Number.isNaN(t) && Math.abs(t - stickyTop) <= STICKY_TOP_MATCH_TOL) return i;
+  }
+
+  for (let i = 0; i < orderedKeys.length; i++) {
+    const t = tops[i];
+    if (!Number.isNaN(t) && t >= stickyTop - STICKY_TOP_MATCH_TOL) return i;
+  }
+
+  return orderedKeys.length - 1;
+}
+
 export const TaskList: React.FC<TaskListProps> = ({
   tasks,
   onCompleteTask,
@@ -85,7 +129,9 @@ export const TaskList: React.FC<TaskListProps> = ({
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [dragOverGroupKey, setDragOverGroupKey] = useState<string | null>(null);
+  const [activeBulkHeadingIndex, setActiveBulkHeadingIndex] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  const headingRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   const projectMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -95,6 +141,46 @@ export const TaskList: React.FC<TaskListProps> = ({
 
   const activeTasks = tasks.filter((task) => !task.completed && !task.deleted);
   const groups = groupTasksByDate(activeTasks);
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+
+  const hasBulkToggle = onToggleBulkCheckboxes != null;
+  const groupKeysSig = groups.map((g) => g.key).join("|");
+  const selectedCount = selectedTaskIds?.size ?? 0;
+
+  useLayoutEffect(() => {
+    if (!hasBulkToggle) return;
+
+    let raf = 0;
+    const run = () => {
+      const g = groupsRef.current;
+      const idx = findStickyBulkHeadingIndex(g.map((x) => x.key), (key) => headingRefs.current.get(key) ?? null);
+      setActiveBulkHeadingIndex((prev) => (prev === idx ? prev : idx));
+    };
+    const schedule = () => {
+      if (raf !== 0) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        run();
+      });
+    };
+
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+
+    const ro = new ResizeObserver(schedule);
+    ro.observe(document.documentElement);
+    const bulkWrap = document.querySelector(".bulk-action-bar-wrapper");
+    if (bulkWrap) ro.observe(bulkWrap);
+
+    return () => {
+      if (raf !== 0) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      ro.disconnect();
+    };
+  }, [hasBulkToggle, groupKeysSig, showBulkCheckboxes, selectedCount, activeTasks.length]);
 
   const now = new Date();
   const todayStr = toLocalDateString(now);
@@ -185,14 +271,13 @@ export const TaskList: React.FC<TaskListProps> = ({
     );
   }
 
-  const hasBulkToggle = onToggleBulkCheckboxes != null;
+  const bulkHeadingHostIndex = Math.min(activeBulkHeadingIndex, groups.length - 1);
 
   return (
     <div className={`task-list-container${showBulkCheckboxes ? " bulk-checkboxes-visible" : ""}`}>
       {groups.map((group, groupIndex) => {
         const droppable = isDroppableGroup(group, todayStr, tomorrowStr);
         const isDragOver = dragOverGroupKey === group.key;
-        const isFirstGroup = groupIndex === 0;
         return (
         <section
           key={group.key}
@@ -201,7 +286,13 @@ export const TaskList: React.FC<TaskListProps> = ({
           onDragLeave={droppable ? (e) => handleSectionDragLeave(e, group.key) : undefined}
           onDrop={droppable ? (e) => handleSectionDrop(e, group) : undefined}
         >
-          <div className={`date-group-heading${group.isSectionHeading ? " section-heading-only" : ""}`}>
+          <div
+            ref={(el) => {
+              if (el) headingRefs.current.set(group.key, el);
+              else headingRefs.current.delete(group.key);
+            }}
+            className={`date-group-heading${group.isSectionHeading ? " section-heading-only" : ""}`}
+          >
             <span
               className={`date-label${group.isOverdue ? " overdue-label" : ""}`}
             >
@@ -210,7 +301,7 @@ export const TaskList: React.FC<TaskListProps> = ({
             {!group.isSectionHeading && (
               <span className="task-count">{group.tasks.length}</span>
             )}
-            {isFirstGroup && hasBulkToggle && (
+            {hasBulkToggle && groupIndex === bulkHeadingHostIndex && (
               <>
                 <span className="date-group-heading-spacer" />
                 <button
