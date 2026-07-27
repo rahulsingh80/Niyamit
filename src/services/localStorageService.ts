@@ -37,18 +37,24 @@ function normalizeTasks(tasks: unknown[]): Task[] {
   }));
 }
 
+/** Later entries win. Guards against old exports where a recurring task could be miscategorized into more than one section. */
+function dedupeTasksById(tasks: Task[]): Task[] {
+  const map = new Map<string, Task>();
+  for (const t of tasks) map.set(t.id, t);
+  return Array.from(map.values());
+}
+
 function isActiveTask(t: Task): boolean {
   return !t.completed && !t.deleted;
 }
 
-/** Recurring tasks are never treated as completed for serialization; they stay in the active list. */
 function isCompletedTask(t: Task): boolean {
-  return t.completed && !t.deleted && !t.recurrence;
+  return t.completed && !t.deleted;
 }
 
 /** Convert in-memory AppData to the serialized JSON shape (activeTasks, completedTasks, deletedTasks, activeProjects, deletedProjects, tags). */
 export function toSerialized(data: AppData): SerializedAppData {
-  const activeTasks = data.tasks.filter((t) => isActiveTask(t) || t.recurrence);
+  const activeTasks = data.tasks.filter(isActiveTask);
   const completedTasks = data.tasks.filter(isCompletedTask);
   const deletedTasks = data.tasks.filter((t) => t.deleted);
   const activeProjects = data.projects.filter((p) => !p.deleted);
@@ -72,7 +78,7 @@ export function fromSerialized(parsed: unknown): AppData | null {
 
   if (Array.isArray(obj.activeTasks) && Array.isArray(obj.completedTasks)) {
     const deletedTasks = Array.isArray(obj.deletedTasks) ? obj.deletedTasks : [];
-    const tasks = normalizeTasks([...obj.activeTasks, ...obj.completedTasks, ...deletedTasks]);
+    const tasks = dedupeTasksById(normalizeTasks([...obj.activeTasks, ...obj.completedTasks, ...deletedTasks]));
     let projects: Project[];
     if (Array.isArray(obj.activeProjects) && Array.isArray(obj.deletedProjects)) {
       projects = [...(obj.activeProjects as Project[]), ...(obj.deletedProjects as Project[])];
