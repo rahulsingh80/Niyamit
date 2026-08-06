@@ -5,5 +5,8 @@ node_modules/
 dist/
 build/
 
+# test coverage reports
+coverage/
+
 # environment variables
 .env*

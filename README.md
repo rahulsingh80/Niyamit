@@ -1,201 +1,141 @@
 # Niyamit – Offline-first Task Manager (Web)
 
-Niyamit is a lightweight, task manager. The core idea is that **data lives as JSON files**, ideally in **Google Drive**, and all clients share a **common TypeScript data model and logic**.
+Niyamit is a task manager whose "backend" is **your own Google Drive**. Data lives as JSON — first in the browser's local storage, then optionally synced to a `Niyamit` folder in Drive — and the core data model and business logic are written to be shared by future non-web clients (Android, desktop).
 
-This first iteration is a **React + TypeScript web app** that:
+This iteration is a **React + TypeScript + Vite** single-page app with no router and no server component. It supports:
 
-- **Adds tasks** with title, notes, due date, and priority
-- **Sorts tasks** by the specified rules
-- **Persists tasks** in browser local storage (offline-first)
-- **Exports tasks** as a JSON file for backup
-
-Later iterations can add:
-
-- Google Drive REST API sync (read/write JSON task files)
-- Android client
-- Desktop client
+- **Natural-language task entry** — type a title like `Buy milk tomorrow 5pm !!2 #groceries @errand` and the due date, time, priority, project, and tag are parsed out automatically
+- **Recurring tasks** (daily/weekly/specific weekdays, day-of-month, day-of-year, Nth-weekday-of-month, every-N-months), with completing one occurrence automatically creating the next
+- **Projects**, arranged as a tree (drag-and-drop, reorder, move under another project), and **tags**
+- **Task clones** — linked copies that stay in sync (completing or editing one updates all of them) until one is renamed or explicitly un-cloned
+- **Reminders**, either at a specific date/time or a fixed offset before the due date, surfaced in a dismissible/snoozable banner
+- **Undo/redo** across all edits, including completion and deletion
+- **Bulk actions** — multi-select tasks to delete, reprioritize, move to a project, or tag them all at once
+- **Google Drive sync** with three-way merge against the last-synced baseline, and a conflict-resolution UI when both sides changed the same field
+- **JSON export/import** for manual backup, independent of Drive
+- **Offline-first persistence** in `localStorage`, with automatic migration from older storage formats
 
 ---
 
 ## Project Structure
 
-- `index.html` – Minimal HTML shell with `#root` where the React app mounts
-- `src/main.tsx` – React entry point (creates root and renders `App`)
-- `src/App.tsx` – Top-level application component and layout
-- `src/styles.css` – Basic modern UI styling
-- `src/domain/taskTypes.ts` – **Shared task data model** (TypeScript types)
-- `src/domain/taskSort.ts` – **Shared sorting logic** for tasks
-- `src/components/TaskForm.tsx` – Form to create new tasks
-- `src/components/TaskList.tsx` – Task list, using shared sorting logic
-- `src/services/localStorageService.ts` – `loadTasks` / `saveTasks` (storage abstraction)
-- `src/services/exportService.ts` – JSON export / download helper
-- `tsconfig.json` – TypeScript compiler options and path aliases
-- `package.json` – Placeholder Node project metadata and scripts
+```
+index.html                    Vite HTML shell
+src/main.tsx                  React entry point; wraps <App> in GoogleOAuthProvider
+src/App.tsx                   Single stateful root: CRUD, sync lifecycle, undo/redo, bulk selection
+src/styles.css                App styling
 
-The **domain** and **services** folders are designed to be reused across other platforms (e.g. React Native, desktop), so all core behavior (data shapes, sorting, persistence abstraction) is not tied to React.
+src/domain/                   Platform-agnostic data model + business logic (no React/DOM)
+  taskTypes.ts                 Task, Reminder, RecurrenceRule types (the canonical schema)
+  projectTypes.ts               Project type + getDescendantIds (projects form a tree)
+  taskSort.ts                  sortTasks / groupTasksByDate — canonical ordering & date bucketing
+  dateParser.ts                Natural-language parser for the task title, recurrence math
+  reminderUtils.ts             getReminderDueAt / isReminderDue / getDueReminders
+  reminderPresets.ts           "Remind me before due" preset options
 
----
+src/services/                 Persistence & sync (also platform-agnostic where possible)
+  localStorageService.ts       On-disk JSON shape, load/save, migration from older formats
+  googleDriveService.ts        Drive REST calls + three-way merge / conflict detection
+  exportService.ts             JSON export/import (manual backup)
 
-## Task Data Model
+src/components/               UI (React), one file per component
+  TaskForm.tsx, TaskList.tsx, ProjectSidebar.tsx, ProjectTree.tsx,
+  BulkActionBar.tsx, RemindersSection.tsx, ProjectSelect.tsx, TagSelect.tsx, HelpPage.tsx
 
-Defined in `src/domain/taskTypes.ts`:
+src/hooks/useNarrowPhoneLayout.ts   Responsive layout hook (collapses sidebar sections on phones)
 
-- **`Task`**
-  - `id: string` – Unique task ID (UUID-like)
-  - `title: string` – Task title
-  - `notes?: string` – Optional longer description
-  - `dueDate: string | null` – ISO date string `YYYY-MM-DD` or `null` for no due date
-  - `priority: 1 | 2 | 3 | 4` – Priority (4 is highest)
-  - `createdAt: string` – ISO datetime string when the task was created
-  - `completed: boolean` – Whether the task is completed
+src/test/setup.ts              Vitest + Testing Library setup (jsdom polyfills)
+*.test.ts / *.test.tsx         Colocated next to the code they test (Vitest convention)
 
-This model is intentionally simple and JSON-friendly so the same shape can be written to files in Google Drive and consumed by future clients.
+tsconfig.json, vite.config.ts  Path aliases (@domain, @services, @components) kept in sync
+```
 
----
-
-## Sorting Logic
-
-Defined in `src/domain/taskSort.ts` as `sortTasks(tasks: Task[]): Task[]`.
-
-Sorting rules:
-
-1. **Due date ascending** (earlier dates first)
-2. **Null / missing due dates at the bottom**
-3. **Priority descending** (4 > 3 > 2 > 1)
-4. **CreatedAt ascending** (older tasks first when other fields are equal)
-
-The React UI never sorts on its own; it always calls the shared `sortTasks` helper, so this logic can be reused across platforms.
+The **domain** and **services** folders have no React or DOM dependency, so the same task/project shapes, sorting rules, date parsing, and Drive merge logic can be reused by a future React Native or desktop client.
 
 ---
 
-## UI Overview
+## Task & Project Data Model
 
-### Task Form
+Defined in `src/domain/taskTypes.ts` and `src/domain/projectTypes.ts`:
 
-Implemented in `src/components/TaskForm.tsx`:
+- **`Task`** — `id`, `title`, `notes?`, `dueDate` (`YYYY-MM-DD` or `null`), `dueTime?` (`HH:MM`), `recurrence?` (`RecurrenceRule`), `priority` (`1`–`4`, 1 is highest), `createdAt`, `updatedAt?`, `completed`, `deleted?`, `cloneGroupId?`, `projectId?`, `reminder?`, `reminderAcknowledgedAt?`, `reminderSnoozedUntil?`, `tags?`
+- **`RecurrenceRule`** — one of six shapes (`weekdays`, `interval`, `dayOfMonth`, `dayOfYear`, `weekdayOfMonth`, `intervalMonths`), each with its own parameters (e.g. `interval` + `anchorWeekday` for "every other Tuesday")
+- **`Reminder`** — either `{ type: "at", date, time }` or `{ type: "before", minutes }`
+- **`Project`** — `id`, `name`, `parentId?` (forms a tree), `sortOrder?`, `createdAt`, `updatedAt?`, `deleted?`
 
-- Fields:
-  - Title (required)
-  - Notes (optional)
-  - Due date (HTML `type="date"`)
-  - Priority (select between P1–P4, with P4 as highest)
-- On submit:
-  - Builds a `Task` object
-  - Generates an ID
-  - Sets `createdAt` to the current ISO datetime
-  - Normalizes `dueDate` to `string | null`
-  - Calls `onAdd(task)` (passed from `App`)
-
-### Task List
-
-Implemented in `src/components/TaskList.tsx`:
-
-- Accepts `tasks: Task[]` as props
-- Uses `sortTasks` from `src/domain/taskSort.ts`
-- Renders a clean list with:
-  - Title and notes
-  - Priority pill (`P1`–`P4`)
-  - Due date (or “No due date”)
-  - Created-at timestamp (localized)
+This model is intentionally JSON-friendly so the same shape can be written to files in Google Drive and consumed by future clients.
 
 ---
 
-## Local Storage Service
+## Sorting & Grouping
 
-Implemented in `src/services/localStorageService.ts`:
+Defined in `src/domain/taskSort.ts`:
 
-- **`loadTasks(): Task[]`**
-  - Reads from `window.localStorage` using key `niyamit.tasks.v1`
-  - Parses JSON into `Task[]`
-  - Returns `[]` if data is missing or invalid
-  - Normalizes `dueDate` to `null` when absent
-- **`saveTasks(tasks: Task[]): void`**
-  - Stringifies the array and writes to local storage
-  - Swallows errors (you could add logging/UX hooks later)
-
-In `App.tsx`, tasks are loaded on initial render and saved whenever the tasks array changes.
+- **`sortTasks(tasks)`** — due date ascending (nulls last) → priority ascending (1 first) → due time ascending (nulls last) → `createdAt` ascending as a final tie-breaker. The UI never sorts on its own; every list goes through this helper.
+- **`groupTasksByDate(tasks)`** — buckets tasks into **Overdue**, **Today**, **Tomorrow**, the next 5 fixed days (always shown, even if empty), **Later** (grouped and sorted by date), and **No due date**.
 
 ---
 
-## Export / Backup Feature
+## Natural-Language Title Parsing
 
-Implemented in `src/services/exportService.ts` as `exportTasksAsJson(tasks, filename?)`:
+`src/domain/dateParser.ts` parses trailing shortcuts out of the task title as you type (see the in-app Help page for the full list), for example:
 
-1. Converts the `Task[]` array to a **pretty-printed JSON string**
-2. Wraps it in a **`Blob`** with `application/json` MIME type
-3. Creates an **object URL** for the blob
-4. Creates a temporary `<a>` element, sets `href` and `download`
-5. Programmatically clicks the link to trigger a **download**
-6. Cleans up the link and revokes the object URL
+```
+Pay rent 1st of every month !!1 #Bills
+Water plants every 3 days
+Call mom !tomorrow 10:00
+Team standup every mon, wed, fri at 09:00
+```
 
-`App.tsx` wires this to the **“Export as JSON”** button in the header.
-
----
-
-## Offline-First Behavior
-
-- All data is stored in **local storage** and kept entirely on the client
-- The app bootstraps from local storage if available
-- No network calls are required for the current iteration
-
-This fits the future direction where:
-
-- Tasks are still JSON
-- A sync layer will read/write the same JSON structure to files in Google Drive
+Recognized tail tokens — date/time, recurrence, `!!1`–`!!4` priority, `!`-prefixed reminders, `#project` (or `#"multi word"`), and `@tag` — can appear in any order and are stripped from the visible title once parsed.
 
 ---
 
-## Google Drive Integration (Future Iteration)
+## Local Storage & Persistence
 
-You can later add a dedicated sync service, for example:
+`src/services/localStorageService.ts` owns the JSON shape written to `localStorage` (key `niyamit.data.v2`): separate `activeTasks` / `completedTasks` / `deletedTasks` arrays, `activeProjects` / `deletedProjects`, and a derived `tags` list. It transparently migrates from older single-key and separate-key storage formats on first load. Every change is saved automatically; sync to Drive is opportunistic (on idle, on manual button click, on startup, or after conflict resolution), not on every keystroke.
 
-- `src/services/googleDriveService.ts`
-  - `loadFromDrive(): Promise<Task[]>`
-  - `saveToDrive(tasks: Task[]): Promise<void>`
+---
 
-That service would:
+## Google Drive Sync
 
-- Use the **Google Drive REST API**
-- Authenticate the user (OAuth 2)
-- Read/write a JSON file (e.g. `niyamit-tasks.json`) in the user’s Drive
-- Merge remote and local changes, then update local storage
+`src/services/googleDriveService.ts` reads/writes a single `niyamit-data.json` file inside a `Niyamit` folder in the signed-in user's Drive (via the `drive.file` OAuth scope — the app can only see files it created). On sync it:
 
-All UI components can remain mostly unchanged because they already depend on the shared domain types and in-memory task list.
+1. Downloads the remote file and compares it against the local data and the last-synced baseline (**three-way merge**).
+2. Applies field-level merges automatically when only one side changed a given field.
+3. Surfaces a **conflict dialog** when both local and remote changed the *same* field differently, letting you pick local or Drive per task.
+
+Requires a `.env` with `VITE_GOOGLE_CLIENT_ID` (a Google OAuth 2.0 "Single-page application" client ID) — see the comments in `.env` for where to create one.
 
 ---
 
 ## Running the App
 
-This repository intentionally avoids pinning dependency versions because your environment currently lacks Node/npm. To run this as a real React app:
-
-1. **Initialize a bundler** (recommended: Vite with React + TypeScript)
-2. Wire it to use:
-   - `index.html` as the HTML shell
-   - `src/main.tsx` as the entry point
-3. Install dependencies:
-   - `react`
-   - `react-dom`
-   - `typescript`
-   - Your chosen bundler (e.g. `vite`)
-4. Configure dev and build scripts in `package.json`.
-
-For example, with Vite:
-
 ```bash
-npm install react react-dom typescript vite @types/react @types/react-dom
+npm install
+npm run dev       # start Vite dev server
+npm run build     # production build (vite build only — does not type-check; see below)
+npm run preview   # preview the production build
+npm run deploy    # build + publish dist/ to GitHub Pages
 ```
 
-Then configure `vite.config` to point to `index.html` and `src/main.tsx`.
+---
+
+## Testing
+
+```bash
+npm test              # run the full Vitest suite once
+npm run test:watch    # watch mode
+npm run test:coverage # run with coverage (v8 provider)
+```
+
+Tests use **Vitest + React Testing Library**, colocated next to the code they cover (`Component.tsx` next to `Component.test.tsx`), per common React/JS convention. `src/domain` and `src/services` — the platform-agnostic business logic — are held to an enforced coverage threshold (80% lines/statements/functions, 75% branches, configured in `vite.config.ts`); `src/App.tsx` and `src/components` have lighter smoke tests (render + key interactions) rather than exhaustive coverage.
+
+Since `vite build` doesn't type-check (esbuild/swc strip types without checking them), run `npx tsc --noEmit` to catch type errors before relying on a green build.
 
 ---
 
 ## Next Steps
 
-- Add Google authentication and Drive file sync
-- Implement task completion and filters
-- Add labels / projects and advanced filtering
-- Build Android and desktop clients that reuse:
-  - `src/domain/taskTypes.ts`
-  - `src/domain/taskSort.ts`
-  - Storage + sync abstractions
-
+- Android and desktop clients reusing `src/domain/` and `src/services/` as-is
+- Expanding UI-layer test coverage beyond smoke tests, if/when the component layer stabilizes
